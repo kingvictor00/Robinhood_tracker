@@ -1,0 +1,29 @@
+{
+  "0xaf9cea352d6a6e3797b657848e7dd11645ed74b2": {
+    "standard": "ERC-721",
+    "label": "SableBramble (SABRA)",
+    "deployer": "0x8Df684F35B3883BCafB422927450c304B8d5a3aA",
+    "tx_hash": "0x052d2e654032446fd48893b70dae8e3451a4d546faaa6807a9388129a9bec5da",
+    "block": 36763032,
+    "minted": true,
+    "socials": {}
+  },
+  "0x82ea8d751b3b1f742a4194691fa2401d0ffb82e1": {
+    "standard": "ERC-721",
+    "label": "OUT OF MY HEAD (OOMH)",
+    "deployer": "0xC6A053D16FEAad387b7441f84522fD0b79a85eD8",
+    "tx_hash": "0x13a3e28370e51a9429a607e051a649cbdf28bcc7f9c2f3856593f03f296840f5",
+    "block": 36765368,
+    "minted": false,
+    "socials": {}
+  },
+  "0x0d6be648c9f6fb25456928976b0ccef008de1106": {
+    "standard": "ERC-721",
+    "label": "pyonya (pyonya)",
+    "deployer": "0xA8e38d1ac501Ab57a888e9667CAD894f64E7540C",
+    "tx_hash": "0x7b17dcfbd0684dde22253c88b4f514906a8c752d357219728d9cbf6dd8a82ab4",
+    "block": 36765963,
+    "minted": true,
+    "socials": {}
+  }
+}
