@@ -1,0 +1,24 @@
+# Get this from @BotFather on Telegram after creating your bot
+TELEGRAM_BOT_TOKEN=8614073466:AAGAWVIl6So7fA8nVo2zIg7-sP8ydGyg2Ho
+
+# Your personal Telegram numeric user ID (get it from @userinfobot).
+# Only this chat ID can use /watch and /unwatch. Leave blank to disable
+# collection management via chat (you can still hand-edit data/contracts.json).
+ADMIN_CHAT_ID=
+
+# Robinhood Chain mainnet public RPC (chain ID 4663). Rate limited — swap in
+# a paid provider (Alchemy/Quicknode/dRPC/Chainstack) for production use.
+RPC_URL=https://rpc.mainnet.chain.robinhood.com
+
+# Blockscout explorer used to build "view transaction" links
+EXPLORER_TX_URL=https://robinhoodchain.blockscout.com/tx/
+
+# How often to poll for new blocks, in seconds
+POLL_INTERVAL_SECONDS=8
+
+# Max number of blocks fetched per eth_getLogs call (keeps requests small
+# on rate-limited RPCs)
+MAX_BLOCK_SPAN=500
+
+# Where state.json / subscribers.json / contracts.json are stored
+DATA_DIR=./data
