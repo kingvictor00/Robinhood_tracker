@@ -23,7 +23,13 @@ from dotenv import load_dotenv
 from eth_abi import decode as abi_decode
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 from web3 import Web3
 
 load_dotenv()
@@ -298,23 +304,26 @@ def extract_socials_generic(data) -> dict:
     return found
 
 
-def get_contract_uri_socials(address: str) -> dict:
+def get_contract_uri_socials(address: str) -> tuple[dict, str]:
     try:
         c = w3.eth.contract(address=Web3.to_checksum_address(address), abi=ERC_MIN_ABI)
         uri = c.functions.contractURI().call()
     except Exception:
-        return {}
+        return {}, "contractURI: not implemented by this contract"
     if not uri:
-        return {}
+        return {}, "contractURI: empty"
     data = fetch_json_url(ipfs_to_http(uri))
     if not data:
-        return {}
-    return extract_socials_generic(data)
+        return {}, "contractURI: set, but metadata couldn't be fetched"
+    found = extract_socials_generic(data)
+    if found:
+        return found, "contractURI: found socials"
+    return {}, "contractURI: metadata has no social links"
 
 
-def get_opensea_socials(address: str) -> dict:
+def get_opensea_socials(address: str) -> tuple[dict, str]:
     if not OPENSEA_API_KEY:
-        return {}
+        return {}, "OpenSea: skipped (no OPENSEA_API_KEY configured)"
     headers = {"X-API-KEY": OPENSEA_API_KEY, "Accept": "application/json"}
     try:
         r = requests.get(
@@ -322,30 +331,46 @@ def get_opensea_socials(address: str) -> dict:
             headers=headers,
             timeout=10,
         )
-        if r.status_code != 200:
-            return {}
-        slug = r.json().get("collection")
-        if not slug:
-            return {}
+    except Exception as exc:
+        return {}, f"OpenSea: contract lookup failed ({exc.__class__.__name__})"
+    if r.status_code == 404:
+        return {}, "OpenSea: contract not indexed yet"
+    if r.status_code != 200:
+        return {}, f"OpenSea: contract lookup failed (HTTP {r.status_code})"
+
+    slug = r.json().get("collection")
+    if not slug:
+        return {}, "OpenSea: contract indexed but no collection slug returned"
+
+    try:
         r2 = requests.get(
             f"https://api.opensea.io/api/v2/collections/{slug}",
             headers=headers,
             timeout=10,
         )
-        if r2.status_code != 200:
-            return {}
-        return extract_socials_generic(r2.json())
-    except Exception:
-        return {}
+    except Exception as exc:
+        return {}, f"OpenSea: collection lookup failed ({exc.__class__.__name__})"
+    if r2.status_code != 200:
+        return {}, f"OpenSea: collection lookup failed (HTTP {r2.status_code})"
+
+    found = extract_socials_generic(r2.json())
+    if found:
+        return found, "OpenSea: found socials"
+    return {}, "OpenSea: collection found, but no social links listed"
 
 
-def get_socials(address: str) -> dict:
-    """contractURI first (free, no key) — OpenSea fills in whatever's missing."""
-    socials = get_contract_uri_socials(address)
+def get_socials(address: str) -> tuple[dict, list[str]]:
+    """contractURI first (free, no key) — OpenSea fills in whatever's missing.
+    Returns (socials_found, diagnostic_notes) so callers can tell the user
+    *why* nothing turned up instead of going silent."""
+    socials, note1 = get_contract_uri_socials(address)
+    notes = [note1]
     if len(socials) < 3:
-        for k, v in get_opensea_socials(address).items():
+        opensea_socials, note2 = get_opensea_socials(address)
+        notes.append(note2)
+        for k, v in opensea_socials.items():
             socials.setdefault(k, v)
-    return socials
+    return socials, notes
 
 
 def classify_and_parse(entry) -> list[dict]:
@@ -504,7 +529,7 @@ async def broadcast_new_contract(app: Application, address: str, info: dict) -> 
     lines = [
         f"🆕 *New NFT contract deployed* — {info['label']}",
         f"Standard: {info['standard']}",
-        f"Contract: `{short_addr(address)}`",
+        f"Contract: `{address}`",
         f"[View on explorer]({EXPLORER_ADDR_URL}{address})",
         "Status: no mints yet",
     ]
@@ -516,7 +541,9 @@ async def broadcast_new_contract(app: Application, address: str, info: dict) -> 
     if socials.get("website"):
         lines.append(f"Website: {socials['website']}")
     if not socials:
-        lines.append("Socials: none found yet")
+        notes = info.get("socials_notes") or []
+        reason = " / ".join(notes) if notes else "not found"
+        lines.append(f"Socials: none found ({reason})")
 
     text = "\n".join(lines)
     for chat_id in subs:
@@ -550,7 +577,7 @@ async def handle_possible_new_contract(app: Application, tx) -> None:
         return  # not an NFT contract (or doesn't implement ERC-165)
 
     label = await asyncio.to_thread(get_collection_label, address, {})
-    socials = await asyncio.to_thread(get_socials, address)
+    socials, socials_notes = await asyncio.to_thread(get_socials, address)
 
     tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else tx_hash
     info = {
@@ -561,6 +588,7 @@ async def handle_possible_new_contract(app: Application, tx) -> None:
         "block": receipt.get("blockNumber"),
         "minted": False,
         "socials": socials,
+        "socials_notes": socials_notes,
     }
     candidates[address.lower()] = info
     save_candidates(candidates)
@@ -771,10 +799,34 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     lines = []
     for addr, info in list(pending.items())[:25]:
-        lines.append(f"• {info['label']} ({info['standard']}) — `{short_addr(addr)}`")
+        lines.append(f"• {info['label']} ({info['standard']}) — `{addr}`")
     await update.message.reply_text(
         "Pending (deployed, not minting yet):\n" + "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# --------------------------------------------------------------------------
+# Error handling — nothing should fail silently
+# --------------------------------------------------------------------------
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log.error("Unhandled exception while processing an update", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_chat:
+        try:
+            await context.bot.send_message(
+                update.effective_chat.id,
+                "⚠️ Something went wrong handling that command — check the bot's "
+                "logs for details.",
+            )
+        except Exception:
+            log.exception("Also failed to notify the chat about the error")
+
+
+async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Catches typos / unregistered commands (e.g. a missing underscore) so
+    # they never fail completely silently.
+    await update.message.reply_text(
+        "Unrecognized command — try /help to see everything I support."
     )
 
 
@@ -809,6 +861,10 @@ def main() -> None:
     app.add_handler(CommandHandler("subscribe_new", cmd_subscribe_new))
     app.add_handler(CommandHandler("unsubscribe_new", cmd_unsubscribe_new))
     app.add_handler(CommandHandler("pending", cmd_pending))
+    # Catch-all for unmatched commands — must be added last. filters.COMMAND
+    # matches any "/xyz" text that no CommandHandler above already claimed.
+    app.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
+    app.add_error_handler(on_error)
 
     log.info("Bot starting — polling %s every %ss", RPC_URL, POLL_INTERVAL)
     app.run_polling()
