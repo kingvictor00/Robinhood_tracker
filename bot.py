@@ -868,3 +868,7 @@ def main() -> None:
 
     log.info("Bot starting — polling %s every %ss", RPC_URL, POLL_INTERVAL)
     app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
