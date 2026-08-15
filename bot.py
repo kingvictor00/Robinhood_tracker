@@ -15,8 +15,10 @@ Config is read from environment variables / a .env file — see .env.example.
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from eth_abi import decode as abi_decode
 from telegram import Update
@@ -35,14 +37,30 @@ RPC_URL = os.environ.get("RPC_URL", "https://rpc.mainnet.chain.robinhood.com")
 EXPLORER_TX_URL = os.environ.get(
     "EXPLORER_TX_URL", "https://robinhoodchain.blockscout.com/tx/"
 )
+EXPLORER_ADDR_URL = os.environ.get(
+    "EXPLORER_ADDR_URL", "https://robinhoodchain.blockscout.com/address/"
+)
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "8"))
 MAX_BLOCK_SPAN = int(os.environ.get("MAX_BLOCK_SPAN", "500"))
+
+# --- new-contract detection ---
+NEW_CONTRACT_BLOCK_SPAN = int(os.environ.get("NEW_CONTRACT_BLOCK_SPAN", "50"))
+NEW_CONTRACT_POLL_INTERVAL = int(
+    os.environ.get("NEW_CONTRACT_POLL_INTERVAL_SECONDS", "15")
+)
+
+# --- socials lookup ---
+OPENSEA_API_KEY = os.environ.get("OPENSEA_API_KEY", "")
+OPENSEA_CHAIN_SLUG = os.environ.get("OPENSEA_CHAIN_SLUG", "robinhood")
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STATE_FILE = DATA_DIR / "state.json"
 SUBSCRIBERS_FILE = DATA_DIR / "subscribers.json"
 CONTRACTS_FILE = DATA_DIR / "contracts.json"
+NEW_SUBSCRIBERS_FILE = DATA_DIR / "new_subscribers.json"
+CANDIDATES_FILE = DATA_DIR / "candidates.json"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
 
@@ -69,7 +87,26 @@ ERC_MIN_ABI = [
         "outputs": [{"name": "", "type": "string"}],
         "type": "function",
     },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "contractURI",
+        "outputs": [{"name": "", "type": "string"}],
+        "type": "function",
+    },
 ]
+
+ERC165_ABI = [
+    {
+        "constant": True,
+        "inputs": [{"name": "interfaceId", "type": "bytes4"}],
+        "name": "supportsInterface",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function",
+    }
+]
+IFACE_ERC721 = bytes.fromhex("80ac58cd")
+IFACE_ERC1155 = bytes.fromhex("d9b67a26")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -124,6 +161,23 @@ def save_contracts(contracts: dict) -> None:
     _save_json(CONTRACTS_FILE, contracts)
 
 
+def load_new_subscribers() -> set:
+    return set(_load_json(NEW_SUBSCRIBERS_FILE, []))
+
+
+def save_new_subscribers(subs: set) -> None:
+    _save_json(NEW_SUBSCRIBERS_FILE, sorted(subs))
+
+
+def load_candidates() -> dict:
+    """address(lowercase) -> {standard, label, deployer, tx_hash, block, minted, socials}"""
+    return _load_json(CANDIDATES_FILE, {})
+
+
+def save_candidates(candidates: dict) -> None:
+    _save_json(CANDIDATES_FILE, candidates)
+
+
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
@@ -159,6 +213,139 @@ def get_collection_label(address: str, contracts: dict) -> str:
         pass
     _metadata_cache[address_l] = label
     return label
+
+
+def detect_token_standard(address: str) -> str | None:
+    """Best-effort ERC-165 check for ERC-721 / ERC-1155. Returns None if
+    neither interface is confirmed (includes contracts that don't
+    implement ERC-165 at all, e.g. plain scripts, EOAs-that-aren't, etc.)."""
+    try:
+        c = w3.eth.contract(address=Web3.to_checksum_address(address), abi=ERC165_ABI)
+    except Exception:
+        return None
+    try:
+        if c.functions.supportsInterface(IFACE_ERC721).call():
+            return "ERC-721"
+    except Exception:
+        pass
+    try:
+        if c.functions.supportsInterface(IFACE_ERC1155).call():
+            return "ERC-1155"
+    except Exception:
+        pass
+    return None
+
+
+def ipfs_to_http(uri: str) -> str:
+    if uri.startswith("ipfs://"):
+        return "https://ipfs.io/ipfs/" + uri[len("ipfs://") :]
+    return uri
+
+
+def fetch_json_url(url: str) -> dict | None:
+    try:
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "rh-nft-bot/1.0"})
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+_TWITTER_RE = re.compile(r"https?://(?:www\.)?(?:twitter|x)\.com/[A-Za-z0-9_]+")
+_TELEGRAM_RE = re.compile(r"https?://(?:t(?:elegram)?\.me)/[A-Za-z0-9_+]+")
+
+# Known field names across OpenSea v1/v2 and common contractURI conventions.
+_KNOWN_SOCIAL_KEYS = {
+    "twitter": {"twitter_username", "twitter", "twitter_url"},
+    "telegram": {"telegram_url", "telegram", "chat_url"},
+    "website": {"external_url", "external_link", "website"},
+}
+
+
+def extract_socials_generic(data) -> dict:
+    """Walk an arbitrary JSON structure and pull out anything that looks
+    like a social link — both via known field names and by regex-matching
+    URLs, so this keeps working even if an API's schema shifts."""
+    found: dict = {}
+
+    def visit(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                kl = k.lower()
+                if isinstance(v, str) and v:
+                    for social, keys in _KNOWN_SOCIAL_KEYS.items():
+                        if kl in keys and social not in found:
+                            val = v
+                            if social == "twitter" and not val.startswith("http"):
+                                val = f"https://x.com/{val.lstrip('@')}"
+                            if social == "telegram" and not val.startswith("http"):
+                                val = f"https://t.me/{val.lstrip('@')}"
+                            found[social] = val
+                    if "twitter" not in found:
+                        m = _TWITTER_RE.search(v)
+                        if m:
+                            found["twitter"] = m.group(0)
+                    if "telegram" not in found:
+                        m = _TELEGRAM_RE.search(v)
+                        if m:
+                            found["telegram"] = m.group(0)
+                visit(v)
+        elif isinstance(node, list):
+            for item in node:
+                visit(item)
+
+    visit(data)
+    return found
+
+
+def get_contract_uri_socials(address: str) -> dict:
+    try:
+        c = w3.eth.contract(address=Web3.to_checksum_address(address), abi=ERC_MIN_ABI)
+        uri = c.functions.contractURI().call()
+    except Exception:
+        return {}
+    if not uri:
+        return {}
+    data = fetch_json_url(ipfs_to_http(uri))
+    if not data:
+        return {}
+    return extract_socials_generic(data)
+
+
+def get_opensea_socials(address: str) -> dict:
+    if not OPENSEA_API_KEY:
+        return {}
+    headers = {"X-API-KEY": OPENSEA_API_KEY, "Accept": "application/json"}
+    try:
+        r = requests.get(
+            f"https://api.opensea.io/api/v2/chain/{OPENSEA_CHAIN_SLUG}/contract/{address}",
+            headers=headers,
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return {}
+        slug = r.json().get("collection")
+        if not slug:
+            return {}
+        r2 = requests.get(
+            f"https://api.opensea.io/api/v2/collections/{slug}",
+            headers=headers,
+            timeout=10,
+        )
+        if r2.status_code != 200:
+            return {}
+        return extract_socials_generic(r2.json())
+    except Exception:
+        return {}
+
+
+def get_socials(address: str) -> dict:
+    """contractURI first (free, no key) — OpenSea fills in whatever's missing."""
+    socials = get_contract_uri_socials(address)
+    if len(socials) < 3:
+        for k, v in get_opensea_socials(address).items():
+            socials.setdefault(k, v)
+    return socials
 
 
 def classify_and_parse(entry) -> list[dict]:
@@ -233,6 +420,8 @@ def fetch_logs(from_block: int, to_block: int, addresses: list[str] | None):
 # Broadcasting
 # --------------------------------------------------------------------------
 async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) -> None:
+    await mark_candidate_minted_if_needed(app, ev)
+
     subs = load_subscribers()
     if not subs:
         return
@@ -269,6 +458,147 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
             )
         except Exception:
             log.exception("Failed to deliver message to chat %s", chat_id)
+
+
+# --------------------------------------------------------------------------
+# New-contract detection (deployed, possibly not minting yet)
+# --------------------------------------------------------------------------
+async def mark_candidate_minted_if_needed(app: Application, ev: dict) -> None:
+    """If this mint belongs to a contract we auto-discovered pre-mint,
+    flip it to 'minted' and let /subscribe_new chats know it's live."""
+    if ev["from"].lower() != ZERO_ADDR:
+        return
+    key = ev["contract"].lower()
+    candidates = load_candidates()
+    if key not in candidates or candidates[key].get("minted"):
+        return
+
+    candidates[key]["minted"] = True
+    save_candidates(candidates)
+
+    subs = load_new_subscribers()
+    if not subs:
+        return
+    label = candidates[key]["label"]
+    text = (
+        f"🚀 *{label}* just minted its first token — no longer pending.\n"
+        f"[View contract]({EXPLORER_ADDR_URL}{ev['contract']})"
+    )
+    for chat_id in subs:
+        try:
+            await app.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=ParseMode.MARKDOWN,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            log.exception("Failed to notify %s of first mint", chat_id)
+
+
+async def broadcast_new_contract(app: Application, address: str, info: dict) -> None:
+    subs = load_new_subscribers()
+    if not subs:
+        return
+
+    lines = [
+        f"🆕 *New NFT contract deployed* — {info['label']}",
+        f"Standard: {info['standard']}",
+        f"Contract: `{short_addr(address)}`",
+        f"[View on explorer]({EXPLORER_ADDR_URL}{address})",
+        "Status: no mints yet",
+    ]
+    socials = info.get("socials") or {}
+    if socials.get("twitter"):
+        lines.append(f"X: {socials['twitter']}")
+    if socials.get("telegram"):
+        lines.append(f"Telegram: {socials['telegram']}")
+    if socials.get("website"):
+        lines.append(f"Website: {socials['website']}")
+    if not socials:
+        lines.append("Socials: none found yet")
+
+    text = "\n".join(lines)
+    for chat_id in subs:
+        try:
+            await app.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=ParseMode.MARKDOWN,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            log.exception("Failed to notify %s of new contract", chat_id)
+
+
+async def handle_possible_new_contract(app: Application, tx) -> None:
+    tx_hash = tx["hash"]
+    try:
+        receipt = w3.eth.get_transaction_receipt(tx_hash)
+    except Exception:
+        return
+    address = receipt.get("contractAddress")
+    if not address:
+        return  # not a contract-creating tx after all
+
+    candidates = load_candidates()
+    if address.lower() in candidates:
+        return
+
+    standard = await asyncio.to_thread(detect_token_standard, address)
+    if not standard:
+        return  # not an NFT contract (or doesn't implement ERC-165)
+
+    label = await asyncio.to_thread(get_collection_label, address, {})
+    socials = await asyncio.to_thread(get_socials, address)
+
+    tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else tx_hash
+    info = {
+        "standard": standard,
+        "label": label,
+        "deployer": tx.get("from"),
+        "tx_hash": tx_hash_str,
+        "block": receipt.get("blockNumber"),
+        "minted": False,
+        "socials": socials,
+    }
+    candidates[address.lower()] = info
+    save_candidates(candidates)
+
+    log.info("New %s contract detected: %s (%s)", standard, label, address)
+    await broadcast_new_contract(app, address, info)
+
+
+async def new_contract_loop(app: Application) -> None:
+    state = load_state()
+    if state.get("last_block_new_contracts") is None:
+        try:
+            state["last_block_new_contracts"] = w3.eth.block_number
+            save_state(state)
+        except Exception:
+            log.exception("Could not reach RPC at startup, will retry")
+            state["last_block_new_contracts"] = 0
+
+    while True:
+        try:
+            latest = w3.eth.block_number
+            from_block = state["last_block_new_contracts"] + 1
+            to_block = min(from_block + NEW_CONTRACT_BLOCK_SPAN - 1, latest)
+
+            if from_block <= to_block:
+                for block_num in range(from_block, to_block + 1):
+                    block = w3.eth.get_block(block_num, full_transactions=True)
+                    for tx in block["transactions"]:
+                        if tx.get("to") is None:
+                            await handle_possible_new_contract(app, tx)
+
+                state["last_block_new_contracts"] = to_block
+                save_state(state)
+
+        except Exception:
+            log.exception("New-contract scan error, will retry after backoff")
+
+        await asyncio.sleep(NEW_CONTRACT_POLL_INTERVAL)
 
 
 # --------------------------------------------------------------------------
@@ -318,11 +648,17 @@ async def poll_loop(app: Application) -> None:
 # --------------------------------------------------------------------------
 HELP_TEXT = (
     "👋 *Robinhood Chain NFT Tracker*\n\n"
+    "*Mint/sale/transfer feed*\n"
     "/subscribe — get live NFT mint/sale/transfer alerts in this chat\n"
     "/unsubscribe — stop alerts here\n"
     "/watching — show which collections are being tracked\n"
     "/watch <address> [label] — (admin) track a specific collection\n"
-    "/unwatch <address> — (admin) stop tracking a collection\n"
+    "/unwatch <address> — (admin) stop tracking a collection\n\n"
+    "*New-contract feed*\n"
+    "/subscribe_new — get alerted the moment a new NFT contract is deployed "
+    "(plus a follow-up when it mints for the first time)\n"
+    "/unsubscribe_new — stop new-contract alerts here\n"
+    "/pending — list deployed contracts that haven't minted yet\n\n"
     "/help — show this message"
 )
 
@@ -408,11 +744,46 @@ async def cmd_watching(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def cmd_subscribe_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    subs = load_new_subscribers()
+    subs.add(update.effective_chat.id)
+    save_new_subscribers(subs)
+    await update.message.reply_text(
+        "✅ Subscribed to new-contract alerts — deploys + first-mint updates."
+    )
+
+
+async def cmd_unsubscribe_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    subs = load_new_subscribers()
+    subs.discard(update.effective_chat.id)
+    save_new_subscribers(subs)
+    await update.message.reply_text("🛑 Unsubscribed from new-contract alerts.")
+
+
+async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    candidates = load_candidates()
+    pending = {a: c for a, c in candidates.items() if not c.get("minted")}
+    if not pending:
+        await update.message.reply_text(
+            "No pending (deployed-but-not-minting) contracts tracked right now.\n"
+            "Note: this only covers contracts deployed since the bot started running."
+        )
+        return
+    lines = []
+    for addr, info in list(pending.items())[:25]:
+        lines.append(f"• {info['label']} ({info['standard']}) — `{short_addr(addr)}`")
+    await update.message.reply_text(
+        "Pending (deployed, not minting yet):\n" + "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 # --------------------------------------------------------------------------
 # Entrypoint
 # --------------------------------------------------------------------------
 async def post_init(app: Application) -> None:
     asyncio.create_task(poll_loop(app))
+    asyncio.create_task(new_contract_loop(app))
 
 
 def main() -> None:
@@ -435,6 +806,9 @@ def main() -> None:
     app.add_handler(CommandHandler("watch", cmd_watch))
     app.add_handler(CommandHandler("unwatch", cmd_unwatch))
     app.add_handler(CommandHandler("watching", cmd_watching))
+    app.add_handler(CommandHandler("subscribe_new", cmd_subscribe_new))
+    app.add_handler(CommandHandler("unsubscribe_new", cmd_unsubscribe_new))
+    app.add_handler(CommandHandler("pending", cmd_pending))
 
     log.info("Bot starting — polling %s every %ss", RPC_URL, POLL_INTERVAL)
     app.run_polling()
