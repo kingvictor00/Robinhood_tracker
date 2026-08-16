@@ -21,7 +21,7 @@ it down. Each alert looks like:
 🟢 Doodboys
 MINT #2107  (ERC-721)
 
-Floor: 0.5 ETH  |  Chain: Robinhood
+Floor: $1,240.50  |  Chain: Robinhood
 Supply: 3,333
 Contract: 0xAbC1230000000000000000000000000000dEaD
 Buyer: 0xDef4560000000000000000000000000000bEEf  (3 mints)
@@ -33,12 +33,19 @@ Buyer: 0xDef4560000000000000000000000000000bEEf  (3 mints)
 Transfers/sales use the same layout with "To" instead of "Buyer" (no mint
 count); burns show "Burner". A couple of fields are best-effort and will
 show `N/A` when unavailable rather than guessing:
-- **Floor price** comes from OpenSea's API (needs `OPENSEA_API_KEY`) — `N/A`
-  if the collection isn't OpenSea-listed or no key is configured.
+- **Floor price** comes from OpenSea's API (needs `OPENSEA_API_KEY`),
+  converted to USD using the native token's price from CoinGecko — `N/A`
+  if the collection isn't OpenSea-listed or no key is configured, or shown
+  in the native token if the USD conversion itself fails.
 - **Supply** comes from the contract's `totalSupply()` — `N/A` if the
   contract doesn't implement it (not every ERC-721/1155 does).
 - **Mint count** is tracked by the bot itself, per buyer per contract,
   starting from whenever the bot began running (no historical backfill).
+
+To avoid flooding a chat during a busy mint, outgoing alerts are rate
+limited: after `RATE_LIMIT_MAX_MESSAGES` alerts (default 15), the bot
+pauses `RATE_LIMIT_COOLDOWN_SECONDS` (default 10s) before sending more.
+This applies across all feeds combined, not per-collection.
 
 **New-contract feed** (`/subscribe_new`) — a separate scan reads every
 block for contract-creation transactions, checks each new contract against
@@ -155,6 +162,7 @@ or the [Blockscout explorer](https://robinhoodchain.blockscout.com).
 ```
 rh-nft-bot/
 ├── bot.py              # everything: RPC polling, event parsing, Telegram bot
+├── watchdog.py          # independent crash/downtime detector (see below)
 ├── requirements.txt
 ├── .env.example
 ├── Dockerfile
@@ -163,8 +171,41 @@ rh-nft-bot/
     ├── subscribers.json      # chat IDs subscribed to the mint feed
     ├── contracts.json        # watched collections (address -> label)
     ├── new_subscribers.json  # chat IDs subscribed to the new-contract feed
-    └── candidates.json       # auto-discovered contracts + socials + mint status
+    ├── candidates.json       # auto-discovered contracts + socials + mint status
+    ├── opensea_cache.json    # cached socials/floor-price lookups (TTL'd)
+    ├── mint_counts.json      # per-buyer, per-contract mint counts
+    ├── heartbeat.txt         # timestamp bot.py updates while alive
+    └── watchdog_state.json   # whether watchdog.py has already alerted
 ```
+
+## Online / hibernating notifications
+
+Two layers, because the bot obviously can't report on itself once it's
+actually dead:
+
+- **Graceful stop/restart** — Ctrl+C, `docker stop`, `systemctl stop`.
+  bot.py sends "🟢 Bot is online" on startup and "😴 Bot is currently
+  hibernating (shutting down)" right before it exits. Admin-only by
+  default; set `NOTIFY_ALL_SUBSCRIBERS_ON_STATUS=true` to broadcast to
+  everyone subscribed to either feed instead.
+- **Crashes, OOM kills, server reboots** — anything that kills the process
+  without warning. bot.py writes a heartbeat file every
+  `HEARTBEAT_INTERVAL_SECONDS` (default 30s) while it's alive. A separate
+  script, `watchdog.py`, checks whether that heartbeat has gone stale and
+  sends the hibernating alert itself — it makes a raw call to the
+  Telegram Bot API rather than depending on bot.py or python-telegram-bot,
+  so a bug in the main process can't take the alerting down with it. It
+  also announces recovery once the heartbeat resumes, and only alerts
+  once per outage rather than spamming on every check.
+
+  Run it on a schedule via cron:
+  ```bash
+  crontab -e
+  # add:
+  */5 * * * * cd /path/to/rh-nft-bot && /path/to/venv/bin/python watchdog.py
+  ```
+  Set `HEARTBEAT_STALE_SECONDS` comfortably above `HEARTBEAT_INTERVAL_SECONDS`
+  (default 120s vs 30s) so one slow tick doesn't trigger a false alarm.
 
 ## Limitations / future work
 
