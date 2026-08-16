@@ -13,11 +13,32 @@ and `TransferBatch` event signatures, and classifies each log as ERC-721 or
 ERC-1155 (ERC-721's `Transfer` shares a signature with ERC-20, so the bot
 distinguishes them by topic count / empty data payload — a standard,
 reliable heuristic). `from == 0x000...0` → mint, `to == 0x000...0` → burn,
-otherwise a transfer (which includes marketplace sales — decoding actual
-sale price would require also parsing the specific marketplace contract,
-e.g. Seaport for OpenSea; see "Future work"). By default, with no
-collections configured, this tracks **all** NFT activity chain-wide —
-use `/watch <address>` to narrow it down.
+otherwise a transfer. By default, with no collections configured, this
+tracks **all** NFT activity chain-wide — use `/watch <address>` to narrow
+it down. Each alert looks like:
+
+```
+🟢 Doodboys
+MINT #2107  (ERC-721)
+
+Floor: 0.5 ETH  |  Chain: Robinhood
+Supply: 3,333
+Contract: 0xAbC1230000000000000000000000000000dEaD
+Buyer: 0xDef4560000000000000000000000000000bEEf  (3 mints)
+
+[Twitter] | [Telegram]
+[View transaction]
+```
+
+Transfers/sales use the same layout with "To" instead of "Buyer" (no mint
+count); burns show "Burner". A couple of fields are best-effort and will
+show `N/A` when unavailable rather than guessing:
+- **Floor price** comes from OpenSea's API (needs `OPENSEA_API_KEY`) — `N/A`
+  if the collection isn't OpenSea-listed or no key is configured.
+- **Supply** comes from the contract's `totalSupply()` — `N/A` if the
+  contract doesn't implement it (not every ERC-721/1155 does).
+- **Mint count** is tracked by the bot itself, per buyer per contract,
+  starting from whenever the bot began running (no historical backfill).
 
 **New-contract feed** (`/subscribe_new`) — a separate scan reads every
 block for contract-creation transactions, checks each new contract against
@@ -32,23 +53,26 @@ Both feeds checkpoint their progress in `data/state.json` independently,
 so a restart resumes from the last processed block instead of re-scanning
 the chain.
 
-### Finding socials
+### Finding socials & floor price
 
-There's no on-chain standard for a contract's X/Telegram, so this is
-best-effort, tried in order:
-1. **`contractURI()`** — a common (but non-standard) convention where the
-   contract points to an off-chain metadata JSON file. Free, no API key.
-2. **OpenSea API** — if you set `OPENSEA_API_KEY`, the bot resolves the
-   contract to an OpenSea collection slug and pulls its listed socials.
-   Won't have anything until OpenSea has indexed the collection, which can
-   lag right behind a fresh deploy.
+There's no on-chain standard for a contract's X/Telegram or a live floor
+price, so both are best-effort, tried in order:
+1. **`contractURI()`** (socials only) — a common (but non-standard)
+   convention where the contract points to an off-chain metadata JSON
+   file. Free, no API key.
+2. **OpenSea API** (socials + floor price) — if you set `OPENSEA_API_KEY`,
+   the bot resolves the contract to an OpenSea collection slug and pulls
+   its listed socials and floor price. Won't have anything until OpenSea
+   has indexed the collection, which can lag right behind a fresh deploy.
+   Results are cached per contract for `OPENSEA_CACHE_TTL_SECONDS`
+   (default 5 min) to avoid hammering the API during a busy mint.
 
-Both are parsed with a schema-agnostic scanner that looks for known field
-names *and* regex-matches any embedded `twitter.com`/`x.com`/`t.me` URLs —
-so it keeps working even if an API's exact field names change. If nothing
-turns up, the alert just says so; you'll often need to check the deployer
-address's own recent activity or the chain explorer manually for brand
-new, unlisted collections.
+Socials are parsed with a schema-agnostic scanner that looks for known
+field names *and* regex-matches any embedded `twitter.com`/`x.com`/`t.me`
+URLs — so it keeps working even if an API's exact field names change. If
+nothing turns up, the alert says so explicitly (e.g. "Socials: none found
+(contractURI: not implemented by this contract / OpenSea: skipped (no
+OPENSEA_API_KEY configured))") instead of just staying quiet about it.
 
 ## 1. Create your bot
 
