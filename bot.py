@@ -62,6 +62,20 @@ OPENSEA_CHAIN_SLUG = os.environ.get("OPENSEA_CHAIN_SLUG", "robinhood")
 OPENSEA_CACHE_TTL = int(os.environ.get("OPENSEA_CACHE_TTL_SECONDS", "300"))
 SUPPLY_CACHE_TTL = int(os.environ.get("SUPPLY_CACHE_TTL_SECONDS", "30"))
 NATIVE_CURRENCY_SYMBOL = os.environ.get("NATIVE_CURRENCY_SYMBOL", "ETH")
+COINGECKO_ID = os.environ.get("COINGECKO_ID", "ethereum")
+PRICE_CACHE_TTL = int(os.environ.get("PRICE_CACHE_TTL_SECONDS", "60"))
+
+# --- outgoing message rate limit (keeps a busy mint from flooding the chat) ---
+RATE_LIMIT_MAX_MESSAGES = int(os.environ.get("RATE_LIMIT_MAX_MESSAGES", "15"))
+RATE_LIMIT_COOLDOWN_SECONDS = float(os.environ.get("RATE_LIMIT_COOLDOWN_SECONDS", "10"))
+
+# --- online/hibernating status notifications ---
+# By default only the admin is pinged on start/stop, to avoid spamming every
+# subscriber on routine restarts. Set to "true" to notify everyone instead.
+NOTIFY_ALL_SUBSCRIBERS_ON_STATUS = (
+    os.environ.get("NOTIFY_ALL_SUBSCRIBERS_ON_STATUS", "false").lower() == "true"
+)
+HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "30"))
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -73,6 +87,7 @@ NEW_SUBSCRIBERS_FILE = DATA_DIR / "new_subscribers.json"
 CANDIDATES_FILE = DATA_DIR / "candidates.json"
 OPENSEA_CACHE_FILE = DATA_DIR / "opensea_cache.json"
 MINT_COUNTS_FILE = DATA_DIR / "mint_counts.json"
+HEARTBEAT_FILE = DATA_DIR / "heartbeat.txt"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
 
@@ -585,6 +600,69 @@ def fetch_logs(from_block: int, to_block: int, addresses: list[str] | None):
 # --------------------------------------------------------------------------
 # Broadcasting
 # --------------------------------------------------------------------------
+class RateLimiter:
+    """Caps how many alert *events* go out before pausing, so a busy mint
+    can't flood a chat. Counts once per event (i.e. once per call to
+    wait_turn()), not once per recipient — broadcasting one event to many
+    subscribed chats still only counts as one."""
+
+    def __init__(self, max_messages: int, cooldown_seconds: float):
+        self.max_messages = max_messages
+        self.cooldown_seconds = cooldown_seconds
+        self._count = 0
+        self._lock = asyncio.Lock()
+
+    async def wait_turn(self) -> None:
+        async with self._lock:
+            if self._count >= self.max_messages:
+                log.info(
+                    "Rate limit hit (%d alerts) — cooling down %ss",
+                    self.max_messages,
+                    self.cooldown_seconds,
+                )
+                await asyncio.sleep(self.cooldown_seconds)
+                self._count = 0
+            self._count += 1
+
+
+RATE_LIMITER = RateLimiter(RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_COOLDOWN_SECONDS)
+
+_PRICE_CACHE: dict = {"checked_at": 0.0, "usd": None}
+
+
+def get_native_usd_price() -> float | None:
+    """USD price of the chain's native/payment token (ETH by default),
+    used to show floor price in $ instead of the raw token amount.
+    Cached briefly; falls back to the last known price if the API call
+    fails so a transient outage doesn't blank out every alert."""
+    now = time.time()
+    if _PRICE_CACHE["usd"] is not None and now - _PRICE_CACHE["checked_at"] < PRICE_CACHE_TTL:
+        return _PRICE_CACHE["usd"]
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": COINGECKO_ID, "vs_currencies": "usd"},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            price = r.json().get(COINGECKO_ID, {}).get("usd")
+            if price:
+                _PRICE_CACHE["usd"] = price
+                _PRICE_CACHE["checked_at"] = now
+    except Exception:
+        log.exception("Failed to fetch %s/USD price", COINGECKO_ID)
+    return _PRICE_CACHE["usd"]
+
+
+def format_floor_usd(floor_price) -> str:
+    if not isinstance(floor_price, (int, float)):
+        return "N/A"
+    usd_price = get_native_usd_price()
+    if usd_price is None:
+        return f"{floor_price:g} {NATIVE_CURRENCY_SYMBOL} (USD price unavailable)"
+    return f"${floor_price * usd_price:,.2f}"
+
+
 ACTION_STYLE = {
     # kind -> (emoji, headline word, label for the address line)
     "mint": ("🟢", "MINT", "Buyer"),
@@ -613,11 +691,7 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
 
     bundle = await asyncio.to_thread(get_opensea_bundle, ev["contract"])
     floor_price = bundle.get("floor_price")
-    floor_txt = (
-        f"{floor_price:g} {NATIVE_CURRENCY_SYMBOL}"
-        if isinstance(floor_price, (int, float))
-        else "N/A"
-    )
+    floor_txt = await asyncio.to_thread(format_floor_usd, floor_price)
     supply_txt = await asyncio.to_thread(get_total_supply, ev["contract"])
 
     tx_hash = entry["transactionHash"]
@@ -657,6 +731,7 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
 
     text = "\n".join(lines)
 
+    await RATE_LIMITER.wait_turn()
     for chat_id in subs:
         try:
             await app.bot.send_message(
@@ -693,6 +768,7 @@ async def mark_candidate_minted_if_needed(app: Application, ev: dict) -> None:
         f"🚀 *{label}* just minted its first token — no longer pending.\n"
         f"[View contract]({EXPLORER_ADDR_URL}{ev['contract']})"
     )
+    await RATE_LIMITER.wait_turn()
     for chat_id in subs:
         try:
             await app.bot.send_message(
@@ -733,6 +809,7 @@ async def broadcast_new_contract(app: Application, address: str, info: dict) -> 
         lines.append(f"Socials: none found ({reason})")
 
     text = "\n".join(lines)
+    await RATE_LIMITER.wait_turn()
     for chat_id in subs:
         try:
             await app.bot.send_message(
@@ -1018,11 +1095,62 @@ async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 # --------------------------------------------------------------------------
+# Online / hibernating status notifications
+# --------------------------------------------------------------------------
+def status_recipients() -> set:
+    """Who gets startup/shutdown pings. Admin-only by default so a routine
+    restart doesn't spam every subscriber; set NOTIFY_ALL_SUBSCRIBERS_ON_STATUS
+    to broadcast to everyone subscribed to either feed instead."""
+    if NOTIFY_ALL_SUBSCRIBERS_ON_STATUS:
+        return load_subscribers() | load_new_subscribers()
+    if ADMIN_CHAT_ID:
+        try:
+            return {int(ADMIN_CHAT_ID)}
+        except ValueError:
+            return {ADMIN_CHAT_ID}
+    return set()
+
+
+async def send_status_message(app: Application, text: str) -> None:
+    for chat_id in status_recipients():
+        try:
+            await app.bot.send_message(chat_id=chat_id, text=text)
+        except Exception:
+            log.exception("Failed to send status notice to %s", chat_id)
+
+
+async def heartbeat_loop() -> None:
+    """Writes a timestamp to disk periodically so an external watchdog
+    (see watchdog.py) can tell the bot has actually crashed or been killed
+    — something the bot obviously can't report on itself once it's dead."""
+    while True:
+        try:
+            HEARTBEAT_FILE.write_text(str(time.time()))
+        except Exception:
+            log.exception("Failed to write heartbeat file")
+        await asyncio.sleep(HEARTBEAT_INTERVAL)
+
+
+# --------------------------------------------------------------------------
 # Entrypoint
 # --------------------------------------------------------------------------
 async def post_init(app: Application) -> None:
     asyncio.create_task(poll_loop(app))
     asyncio.create_task(new_contract_loop(app))
+    asyncio.create_task(heartbeat_loop())
+    await send_status_message(
+        app, "🟢 Bot is online and tracking Robinhood Chain NFT activity."
+    )
+
+
+async def post_stop(app: Application) -> None:
+    # Fires on a graceful stop (Ctrl+C, `docker stop`, `systemctl stop`) —
+    # an actual crash or kill -9 skips this entirely, which is exactly why
+    # watchdog.py exists as a second, independent layer.
+    log.info("Bot stopping — sending hibernation notice")
+    await send_status_message(
+        app, "😴 Bot is currently hibernating (shutting down)."
+    )
 
 
 def main() -> None:
@@ -1037,7 +1165,13 @@ def main() -> None:
             RPC_URL,
         )
 
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .post_stop(post_stop)
+        .build()
+    )
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("subscribe", cmd_subscribe))
