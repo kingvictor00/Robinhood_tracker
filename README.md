@@ -149,6 +149,7 @@ Add the bot to a group (or DM it directly), then:
 | `/subscribe_new` | anyone | get alerted the moment a new NFT contract is deployed, plus a follow-up on its first mint |
 | `/unsubscribe_new` | anyone | stop new-contract alerts in this chat |
 | `/pending` | anyone | list deployed contracts that haven't minted yet |
+| `/trending` | anyone | top 10 collections by mint activity in the last 24h |
 | `/help` | anyone | show command list |
 
 These two feeds are independent — you can subscribe to either, both, or neither in a given chat.
@@ -174,9 +175,36 @@ rh-nft-bot/
     ├── candidates.json       # auto-discovered contracts + socials + mint status
     ├── opensea_cache.json    # cached socials/floor-price lookups (TTL'd)
     ├── mint_counts.json      # per-buyer, per-contract mint counts
+    ├── trending.json         # per-contract mint timestamps + seen holders (feeds /trending)
     ├── heartbeat.txt         # timestamp bot.py updates while alive
     └── watchdog_state.json   # whether watchdog.py has already alerted
 ```
+
+## /trending
+
+Every mint the bot observes (across the whole chain, or just watched
+collections if you've configured `/watch`) feeds a running tally — this
+happens regardless of whether anyone's subscribed to the mint feed, so
+data keeps accumulating in the background either way. `/trending` ranks
+the top 10 by mint count within `TRENDING_WINDOW_SECONDS` (default 24h):
+
+```
+🔥 Robinhood
+
+1: Doodboys | floor: $13.00 | supply: 2,000 | holders: 1,500+
+2: TOADLAYER | floor: $84.10 | supply: 766,857 | holders: 340+
+...
+```
+
+Two honest caveats baked into the design:
+- **This is "trending since the bot started," not all-time.** There's no
+  historical indexer here — the mint-time window and holder counts only
+  reflect what's happened while the bot has been running.
+- **Holder counts are a lower bound**, shown with a `+`. It's the number
+  of distinct addresses the bot has seen mint from that contract — not a
+  true current-holder count (which would need tracking every subsequent
+  transfer too), and it can't count anyone who minted before the bot
+  started.
 
 ## Online / hibernating notifications
 
