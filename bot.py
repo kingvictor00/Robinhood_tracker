@@ -16,6 +16,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from pathlib import Path
 
 import requests
@@ -55,9 +56,12 @@ NEW_CONTRACT_POLL_INTERVAL = int(
     os.environ.get("NEW_CONTRACT_POLL_INTERVAL_SECONDS", "15")
 )
 
-# --- socials lookup ---
+# --- socials + floor-price lookup ---
 OPENSEA_API_KEY = os.environ.get("OPENSEA_API_KEY", "")
 OPENSEA_CHAIN_SLUG = os.environ.get("OPENSEA_CHAIN_SLUG", "robinhood")
+OPENSEA_CACHE_TTL = int(os.environ.get("OPENSEA_CACHE_TTL_SECONDS", "300"))
+SUPPLY_CACHE_TTL = int(os.environ.get("SUPPLY_CACHE_TTL_SECONDS", "30"))
+NATIVE_CURRENCY_SYMBOL = os.environ.get("NATIVE_CURRENCY_SYMBOL", "ETH")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,6 +71,8 @@ SUBSCRIBERS_FILE = DATA_DIR / "subscribers.json"
 CONTRACTS_FILE = DATA_DIR / "contracts.json"
 NEW_SUBSCRIBERS_FILE = DATA_DIR / "new_subscribers.json"
 CANDIDATES_FILE = DATA_DIR / "candidates.json"
+OPENSEA_CACHE_FILE = DATA_DIR / "opensea_cache.json"
+MINT_COUNTS_FILE = DATA_DIR / "mint_counts.json"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
 
@@ -113,6 +119,16 @@ ERC165_ABI = [
 ]
 IFACE_ERC721 = bytes.fromhex("80ac58cd")
 IFACE_ERC1155 = bytes.fromhex("d9b67a26")
+
+SUPPLY_ABI = [
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "totalSupply",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function",
+    }
+]
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -182,6 +198,34 @@ def load_candidates() -> dict:
 
 def save_candidates(candidates: dict) -> None:
     _save_json(CANDIDATES_FILE, candidates)
+
+
+def load_opensea_cache() -> dict:
+    return _load_json(OPENSEA_CACHE_FILE, {})
+
+
+def save_opensea_cache(cache: dict) -> None:
+    _save_json(OPENSEA_CACHE_FILE, cache)
+
+
+def load_mint_counts() -> dict:
+    """contract(lowercase) -> {buyer(lowercase) -> count}"""
+    return _load_json(MINT_COUNTS_FILE, {})
+
+
+def save_mint_counts(counts: dict) -> None:
+    _save_json(MINT_COUNTS_FILE, counts)
+
+
+def bump_mint_count(contract: str, buyer: str) -> int:
+    """Tracks how many times this address has minted from this contract
+    since the bot started running (no historical backfill)."""
+    counts = load_mint_counts()
+    c_key, b_key = contract.lower(), buyer.lower()
+    counts.setdefault(c_key, {})
+    counts[c_key][b_key] = counts[c_key].get(b_key, 0) + 1
+    save_mint_counts(counts)
+    return counts[c_key][b_key]
 
 
 # --------------------------------------------------------------------------
@@ -321,56 +365,153 @@ def get_contract_uri_socials(address: str) -> tuple[dict, str]:
     return {}, "contractURI: metadata has no social links"
 
 
-def get_opensea_socials(address: str) -> tuple[dict, str]:
-    if not OPENSEA_API_KEY:
-        return {}, "OpenSea: skipped (no OPENSEA_API_KEY configured)"
-    headers = {"X-API-KEY": OPENSEA_API_KEY, "Accept": "application/json"}
+def _opensea_headers() -> dict:
+    return {"X-API-KEY": OPENSEA_API_KEY, "Accept": "application/json"}
+
+
+def _opensea_resolve_slug(address: str) -> tuple[str | None, str]:
     try:
         r = requests.get(
             f"https://api.opensea.io/api/v2/chain/{OPENSEA_CHAIN_SLUG}/contract/{address}",
-            headers=headers,
+            headers=_opensea_headers(),
             timeout=10,
         )
     except Exception as exc:
-        return {}, f"OpenSea: contract lookup failed ({exc.__class__.__name__})"
+        return None, f"OpenSea: contract lookup failed ({exc.__class__.__name__})"
     if r.status_code == 404:
-        return {}, "OpenSea: contract not indexed yet"
+        return None, "OpenSea: contract not indexed yet"
     if r.status_code != 200:
-        return {}, f"OpenSea: contract lookup failed (HTTP {r.status_code})"
-
+        return None, f"OpenSea: contract lookup failed (HTTP {r.status_code})"
     slug = r.json().get("collection")
     if not slug:
-        return {}, "OpenSea: contract indexed but no collection slug returned"
+        return None, "OpenSea: contract indexed but no collection slug returned"
+    return slug, "OpenSea: slug resolved"
 
+
+def _opensea_collection_socials(slug: str) -> tuple[dict, str]:
     try:
-        r2 = requests.get(
+        r = requests.get(
             f"https://api.opensea.io/api/v2/collections/{slug}",
-            headers=headers,
+            headers=_opensea_headers(),
             timeout=10,
         )
     except Exception as exc:
         return {}, f"OpenSea: collection lookup failed ({exc.__class__.__name__})"
-    if r2.status_code != 200:
-        return {}, f"OpenSea: collection lookup failed (HTTP {r2.status_code})"
-
-    found = extract_socials_generic(r2.json())
+    if r.status_code != 200:
+        return {}, f"OpenSea: collection lookup failed (HTTP {r.status_code})"
+    found = extract_socials_generic(r.json())
     if found:
         return found, "OpenSea: found socials"
     return {}, "OpenSea: collection found, but no social links listed"
 
 
-def get_socials(address: str) -> tuple[dict, list[str]]:
-    """contractURI first (free, no key) — OpenSea fills in whatever's missing.
-    Returns (socials_found, diagnostic_notes) so callers can tell the user
-    *why* nothing turned up instead of going silent."""
+def _find_numeric_field(data, keys: set) -> float | None:
+    """Same idea as extract_socials_generic but hunts for a numeric field
+    (e.g. floor_price) anywhere in the JSON, tolerant of schema changes."""
+    result = {"value": None}
+
+    def visit(node):
+        if result["value"] is not None:
+            return
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k.lower() in keys and isinstance(v, (int, float)) and not isinstance(v, bool):
+                    result["value"] = v
+                    return
+            for v in node.values():
+                visit(v)
+        elif isinstance(node, list):
+            for item in node:
+                visit(item)
+
+    visit(data)
+    return result["value"]
+
+
+def _opensea_floor_price(slug: str) -> tuple[float | None, str]:
+    try:
+        r = requests.get(
+            f"https://api.opensea.io/api/v2/collections/{slug}/stats",
+            headers=_opensea_headers(),
+            timeout=10,
+        )
+    except Exception as exc:
+        return None, f"OpenSea: floor lookup failed ({exc.__class__.__name__})"
+    if r.status_code != 200:
+        return None, f"OpenSea: floor lookup failed (HTTP {r.status_code})"
+    floor = _find_numeric_field(r.json(), {"floor_price"})
+    if floor is None:
+        return None, "OpenSea: no floor price listed"
+    return floor, "OpenSea: floor found"
+
+
+def get_opensea_bundle(address: str) -> dict:
+    """Socials + floor price for a contract, cached with a TTL so a burst
+    of events for the same collection doesn't hammer OpenSea's API.
+    contractURI is always checked live first (free, no rate limit worry);
+    OpenSea is only queried if contractURI didn't give us everything."""
+    address_l = address.lower()
+    cache = load_opensea_cache()
+    entry = cache.get(address_l)
+    now = time.time()
+    if entry and (now - entry.get("checked_at", 0)) < OPENSEA_CACHE_TTL:
+        return entry
+
     socials, note1 = get_contract_uri_socials(address)
     notes = [note1]
-    if len(socials) < 3:
-        opensea_socials, note2 = get_opensea_socials(address)
-        notes.append(note2)
-        for k, v in opensea_socials.items():
-            socials.setdefault(k, v)
-    return socials, notes
+    slug = None
+    floor_price = None
+
+    if not OPENSEA_API_KEY:
+        notes.append("OpenSea: skipped (no OPENSEA_API_KEY configured)")
+    else:
+        slug, slug_note = _opensea_resolve_slug(address)
+        notes.append(slug_note)
+        if slug:
+            if len(socials) < 3:
+                os_socials, os_note = _opensea_collection_socials(slug)
+                notes.append(os_note)
+                for k, v in os_socials.items():
+                    socials.setdefault(k, v)
+            floor_price, floor_note = _opensea_floor_price(slug)
+            notes.append(floor_note)
+
+    result = {
+        "checked_at": now,
+        "slug": slug,
+        "socials": socials,
+        "socials_notes": notes,
+        "floor_price": floor_price,
+    }
+    cache[address_l] = result
+    save_opensea_cache(cache)
+    return result
+
+
+_SUPPLY_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def get_total_supply(address: str) -> str:
+    """totalSupply() isn't part of every ERC-721/1155 (only Enumerable
+    extensions guarantee it), so this degrades to 'N/A' when unavailable.
+    Cached briefly in memory since it's called on every event for the
+    same contract."""
+    key = address.lower()
+    now = time.time()
+    cached = _SUPPLY_CACHE.get(key)
+    if cached and now - cached[0] < SUPPLY_CACHE_TTL:
+        return cached[1]
+
+    display = "N/A"
+    try:
+        c = w3.eth.contract(address=Web3.to_checksum_address(address), abi=SUPPLY_ABI)
+        supply = c.functions.totalSupply().call()
+        display = f"{supply:,}"
+    except Exception:
+        pass
+
+    _SUPPLY_CACHE[key] = (now, display)
+    return display
 
 
 def classify_and_parse(entry) -> list[dict]:
@@ -444,6 +585,14 @@ def fetch_logs(from_block: int, to_block: int, addresses: list[str] | None):
 # --------------------------------------------------------------------------
 # Broadcasting
 # --------------------------------------------------------------------------
+ACTION_STYLE = {
+    # kind -> (emoji, headline word, label for the address line)
+    "mint": ("🟢", "MINT", "Buyer"),
+    "burn": ("🔴", "BURN", "Burner"),
+    "transfer": ("🔁", "TRANSFER", "To"),
+}
+
+
 async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) -> None:
     await mark_candidate_minted_if_needed(app, ev)
 
@@ -451,27 +600,62 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
     if not subs:
         return
 
-    label = get_collection_label(ev["contract"], contracts)
-
     if ev["from"].lower() == ZERO_ADDR:
-        action = "🟢 MINT"
+        kind = "mint"
     elif ev["to"].lower() == ZERO_ADDR:
-        action = "🔴 BURN"
+        kind = "burn"
     else:
-        action = "🔁 TRANSFER"
+        kind = "transfer"
+    emoji, action_word, actor_label = ACTION_STYLE[kind]
+
+    label = get_collection_label(ev["contract"], contracts)
+    amount_txt = f" x{ev['amount']}" if ev["amount"] != 1 else ""
+
+    bundle = await asyncio.to_thread(get_opensea_bundle, ev["contract"])
+    floor_price = bundle.get("floor_price")
+    floor_txt = (
+        f"{floor_price:g} {NATIVE_CURRENCY_SYMBOL}"
+        if isinstance(floor_price, (int, float))
+        else "N/A"
+    )
+    supply_txt = await asyncio.to_thread(get_total_supply, ev["contract"])
 
     tx_hash = entry["transactionHash"]
     tx_hash = tx_hash.hex() if hasattr(tx_hash, "hex") else tx_hash
     tx_link = f"{EXPLORER_TX_URL}{tx_hash}"
 
-    amount_txt = f" x{ev['amount']}" if ev["amount"] != 1 else ""
-    text = (
-        f"{action} — *{label}*\n"
-        f"Token #{ev['token_id']}{amount_txt}  ({ev['standard']})\n"
-        f"From: `{short_addr(ev['from'])}`\n"
-        f"To: `{short_addr(ev['to'])}`\n"
-        f"[View transaction]({tx_link})"
-    )
+    actor_addr = ev["from"] if kind == "burn" else ev["to"]
+
+    lines = [
+        f"{emoji} *{label}*",
+        f"{action_word} #{ev['token_id']}{amount_txt}  ({ev['standard']})",
+        "",
+        f"Floor: {floor_txt}  |  Chain: Robinhood",
+        f"Supply: {supply_txt}",
+        f"Contract: `{ev['contract']}`",
+    ]
+
+    if kind == "mint":
+        mint_no = bump_mint_count(ev["contract"], actor_addr)
+        times_txt = "mint" if mint_no == 1 else "mints"
+        lines.append(f"{actor_label}: `{actor_addr}`  ({mint_no} {times_txt})")
+    else:
+        lines.append(f"{actor_label}: `{actor_addr}`")
+
+    socials = bundle.get("socials") or {}
+    social_links = []
+    if socials.get("twitter"):
+        social_links.append(f"[Twitter]({socials['twitter']})")
+    if socials.get("telegram"):
+        social_links.append(f"[Telegram]({socials['telegram']})")
+    if socials.get("website"):
+        social_links.append(f"[Website]({socials['website']})")
+
+    lines.append("")
+    lines.append(" | ".join(social_links) if social_links else "Socials: none found")
+    lines.append(f"[View transaction]({tx_link})")
+
+    text = "\n".join(lines)
 
     for chat_id in subs:
         try:
@@ -534,13 +718,16 @@ async def broadcast_new_contract(app: Application, address: str, info: dict) -> 
         "Status: no mints yet",
     ]
     socials = info.get("socials") or {}
+    social_links = []
     if socials.get("twitter"):
-        lines.append(f"X: {socials['twitter']}")
+        social_links.append(f"[Twitter]({socials['twitter']})")
     if socials.get("telegram"):
-        lines.append(f"Telegram: {socials['telegram']}")
+        social_links.append(f"[Telegram]({socials['telegram']})")
     if socials.get("website"):
-        lines.append(f"Website: {socials['website']}")
-    if not socials:
+        social_links.append(f"[Website]({socials['website']})")
+    if social_links:
+        lines.append(" | ".join(social_links))
+    else:
         notes = info.get("socials_notes") or []
         reason = " / ".join(notes) if notes else "not found"
         lines.append(f"Socials: none found ({reason})")
@@ -577,7 +764,7 @@ async def handle_possible_new_contract(app: Application, tx) -> None:
         return  # not an NFT contract (or doesn't implement ERC-165)
 
     label = await asyncio.to_thread(get_collection_label, address, {})
-    socials, socials_notes = await asyncio.to_thread(get_socials, address)
+    bundle = await asyncio.to_thread(get_opensea_bundle, address)
 
     tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else tx_hash
     info = {
@@ -587,8 +774,8 @@ async def handle_possible_new_contract(app: Application, tx) -> None:
         "tx_hash": tx_hash_str,
         "block": receipt.get("blockNumber"),
         "minted": False,
-        "socials": socials,
-        "socials_notes": socials_notes,
+        "socials": bundle.get("socials", {}),
+        "socials_notes": bundle.get("socials_notes", []),
     }
     candidates[address.lower()] = info
     save_candidates(candidates)
