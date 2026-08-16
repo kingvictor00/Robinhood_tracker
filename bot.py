@@ -77,6 +77,11 @@ NOTIFY_ALL_SUBSCRIBERS_ON_STATUS = (
 )
 HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "30"))
 
+# --- /trending ---
+TRENDING_WINDOW_SECONDS = int(os.environ.get("TRENDING_WINDOW_SECONDS", str(24 * 3600)))
+# Safety cap so a single mega-mint contract can't grow the holders list forever.
+TRENDING_MAX_HOLDERS_TRACKED = int(os.environ.get("TRENDING_MAX_HOLDERS_TRACKED", "5000"))
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -87,6 +92,7 @@ NEW_SUBSCRIBERS_FILE = DATA_DIR / "new_subscribers.json"
 CANDIDATES_FILE = DATA_DIR / "candidates.json"
 OPENSEA_CACHE_FILE = DATA_DIR / "opensea_cache.json"
 MINT_COUNTS_FILE = DATA_DIR / "mint_counts.json"
+TRENDING_FILE = DATA_DIR / "trending.json"
 HEARTBEAT_FILE = DATA_DIR / "heartbeat.txt"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
@@ -241,6 +247,39 @@ def bump_mint_count(contract: str, buyer: str) -> int:
     counts[c_key][b_key] = counts[c_key].get(b_key, 0) + 1
     save_mint_counts(counts)
     return counts[c_key][b_key]
+
+
+def load_trending() -> dict:
+    """contract(lowercase) -> {label, mint_times: [epoch,...], holders: [addr,...]}"""
+    return _load_json(TRENDING_FILE, {})
+
+
+def save_trending(data: dict) -> None:
+    _save_json(TRENDING_FILE, data)
+
+
+def record_trending_mint(contract: str, buyer: str, label: str) -> None:
+    """Feeds /trending — called on every mint regardless of whether anyone's
+    subscribed, so the ranking has data to work with. mint_times is pruned
+    to TRENDING_WINDOW_SECONDS on every write; holders is a running set of
+    every address the bot has ever seen mint from this contract (a
+    lower-bound on real holder count, since it only starts counting once
+    the bot is running — hence the "+" shown in /trending)."""
+    data = load_trending()
+    key = contract.lower()
+    now = time.time()
+    cutoff = now - TRENDING_WINDOW_SECONDS
+
+    entry = data.setdefault(key, {"label": label, "mint_times": [], "holders": []})
+    entry["label"] = label
+    entry["mint_times"] = [t for t in entry["mint_times"] if t >= cutoff] + [now]
+
+    buyer_l = buyer.lower()
+    if buyer_l not in entry["holders"] and len(entry["holders"]) < TRENDING_MAX_HOLDERS_TRACKED:
+        entry["holders"].append(buyer_l)
+
+    data[key] = entry
+    save_trending(data)
 
 
 # --------------------------------------------------------------------------
@@ -674,19 +713,25 @@ ACTION_STYLE = {
 async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) -> None:
     await mark_candidate_minted_if_needed(app, ev)
 
-    subs = load_subscribers()
-    if not subs:
-        return
-
     if ev["from"].lower() == ZERO_ADDR:
         kind = "mint"
     elif ev["to"].lower() == ZERO_ADDR:
         kind = "burn"
     else:
         kind = "transfer"
-    emoji, action_word, actor_label = ACTION_STYLE[kind]
 
     label = get_collection_label(ev["contract"], contracts)
+
+    if kind == "mint":
+        # Feeds /trending regardless of whether anyone's subscribed to the
+        # mint feed itself — trending data should keep accumulating either way.
+        record_trending_mint(ev["contract"], ev["to"], label)
+
+    subs = load_subscribers()
+    if not subs:
+        return
+
+    emoji, action_word, actor_label = ACTION_STYLE[kind]
     amount_txt = f" x{ev['amount']}" if ev["amount"] != 1 else ""
 
     bundle = await asyncio.to_thread(get_opensea_bundle, ev["contract"])
@@ -951,6 +996,8 @@ HELP_TEXT = (
     "(plus a follow-up when it mints for the first time)\n"
     "/unsubscribe_new — stop new-contract alerts here\n"
     "/pending — list deployed contracts that haven't minted yet\n\n"
+    "*Trending*\n"
+    "/trending — top 10 collections by mint activity in the last 24h\n\n"
     "/help — show this message"
 )
 
@@ -1070,6 +1117,47 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
+async def cmd_trending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = load_trending()
+    now = time.time()
+    cutoff = now - TRENDING_WINDOW_SECONDS
+
+    ranked = []
+    for addr, entry in data.items():
+        recent_mints = [t for t in entry.get("mint_times", []) if t >= cutoff]
+        if not recent_mints:
+            continue
+        ranked.append((addr, entry.get("label", addr), len(recent_mints), len(entry.get("holders", []))))
+
+    if not ranked:
+        await update.message.reply_text(
+            "No mint activity tracked in the trending window yet — check "
+            "back once collections start minting."
+        )
+        return
+
+    ranked.sort(key=lambda r: r[2], reverse=True)
+    top = ranked[:10]
+
+    lines = ["🔥 *Robinhood*", ""]
+    for i, (addr, label, mint_count, holder_count) in enumerate(top, start=1):
+        bundle = await asyncio.to_thread(get_opensea_bundle, addr)
+        floor_txt = await asyncio.to_thread(format_floor_usd, bundle.get("floor_price"))
+        supply_txt = await asyncio.to_thread(get_total_supply, addr)
+        lines.append(
+            f"{i}: {label} | floor: {floor_txt} | supply: {supply_txt} "
+            f"| holders: {holder_count}+"
+        )
+
+    window_hours = TRENDING_WINDOW_SECONDS // 3600
+    lines.append("")
+    lines.append(
+        f"_Ranked by mints in the last {window_hours}h, tracked since the bot "
+        f"started. Holder counts are a running lower bound._"
+    )
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
 # --------------------------------------------------------------------------
 # Error handling — nothing should fail silently
 # --------------------------------------------------------------------------
@@ -1182,6 +1270,7 @@ def main() -> None:
     app.add_handler(CommandHandler("subscribe_new", cmd_subscribe_new))
     app.add_handler(CommandHandler("unsubscribe_new", cmd_unsubscribe_new))
     app.add_handler(CommandHandler("pending", cmd_pending))
+    app.add_handler(CommandHandler("trending", cmd_trending))
     # Catch-all for unmatched commands — must be added last. filters.COMMAND
     # matches any "/xyz" text that no CommandHandler above already claimed.
     app.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
