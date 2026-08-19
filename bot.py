@@ -88,7 +88,7 @@ TRENDING_WINDOW_SECONDS = int(os.environ.get("TRENDING_WINDOW_SECONDS", str(24 *
 # Safety cap so a single mega-mint contract can't grow the holders list forever.
 TRENDING_MAX_HOLDERS_TRACKED = int(os.environ.get("TRENDING_MAX_HOLDERS_TRACKED", "5000"))
 # How often a /trending message refreshes itself in place (live table)
-LIVE_TRENDING_REFRESH_SECONDS = int(os.environ.get("LIVE_TRENDING_REFRESH_SECONDS", "60"))
+LIVE_TRENDING_REFRESH_SECONDS = int(os.environ.get("LIVE_TRENDING_REFRESH_SECONDS", "5"))
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
