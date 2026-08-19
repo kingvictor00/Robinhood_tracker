@@ -69,6 +69,12 @@ PRICE_CACHE_TTL = int(os.environ.get("PRICE_CACHE_TTL_SECONDS", "60"))
 RATE_LIMIT_MAX_MESSAGES = int(os.environ.get("RATE_LIMIT_MAX_MESSAGES", "15"))
 RATE_LIMIT_COOLDOWN_SECONDS = float(os.environ.get("RATE_LIMIT_COOLDOWN_SECONDS", "10"))
 
+# --- /subscribe (mint/transfer/burn) feed throttle — separate from the
+# general RATE_LIMITER above, and specific to this one feed as requested ---
+MINT_FEED_MAX_PER_WINDOW = int(os.environ.get("MINT_FEED_MAX_PER_WINDOW", "10"))
+MINT_FEED_PER_SEND_DELAY = float(os.environ.get("MINT_FEED_PER_SEND_DELAY_SECONDS", "5"))
+MINT_FEED_COOLDOWN_SECONDS = float(os.environ.get("MINT_FEED_COOLDOWN_SECONDS", "60"))
+
 # --- online/hibernating status notifications ---
 # By default only the admin is pinged on start/stop, to avoid spamming every
 # subscriber on routine restarts. Set to "true" to notify everyone instead.
@@ -81,6 +87,8 @@ HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "30"))
 TRENDING_WINDOW_SECONDS = int(os.environ.get("TRENDING_WINDOW_SECONDS", str(24 * 3600)))
 # Safety cap so a single mega-mint contract can't grow the holders list forever.
 TRENDING_MAX_HOLDERS_TRACKED = int(os.environ.get("TRENDING_MAX_HOLDERS_TRACKED", "5000"))
+# How often a /trending message refreshes itself in place (live table)
+LIVE_TRENDING_REFRESH_SECONDS = int(os.environ.get("LIVE_TRENDING_REFRESH_SECONDS", "60"))
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -93,6 +101,7 @@ CANDIDATES_FILE = DATA_DIR / "candidates.json"
 OPENSEA_CACHE_FILE = DATA_DIR / "opensea_cache.json"
 MINT_COUNTS_FILE = DATA_DIR / "mint_counts.json"
 TRENDING_FILE = DATA_DIR / "trending.json"
+LIVE_TRENDING_FILE = DATA_DIR / "live_trending.json"
 HEARTBEAT_FILE = DATA_DIR / "heartbeat.txt"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
@@ -280,6 +289,16 @@ def record_trending_mint(contract: str, buyer: str, label: str) -> None:
 
     data[key] = entry
     save_trending(data)
+
+
+def load_live_trending() -> dict:
+    """chat_id(str) -> {chat_id, message_id} for /trending messages that
+    should keep refreshing themselves in place."""
+    return _load_json(LIVE_TRENDING_FILE, {})
+
+
+def save_live_trending(data: dict) -> None:
+    _save_json(LIVE_TRENDING_FILE, data)
 
 
 # --------------------------------------------------------------------------
@@ -666,6 +685,39 @@ class RateLimiter:
 
 RATE_LIMITER = RateLimiter(RATE_LIMIT_MAX_MESSAGES, RATE_LIMIT_COOLDOWN_SECONDS)
 
+
+class MintFeedLimiter:
+    """Dedicated throttle for the /subscribe mint/transfer/burn feed: up to
+    max_per_window events, with a per_send_delay pause between each one,
+    then a full cooldown once the window's limit is hit. Distinct from the
+    general RateLimiter above, which still governs the other feeds."""
+
+    def __init__(self, max_per_window: int, per_send_delay: float, cooldown_seconds: float):
+        self.max_per_window = max_per_window
+        self.per_send_delay = per_send_delay
+        self.cooldown_seconds = cooldown_seconds
+        self._count = 0
+        self._lock = asyncio.Lock()
+
+    async def wait_turn(self) -> None:
+        async with self._lock:
+            if self._count >= self.max_per_window:
+                log.info(
+                    "Mint feed limit hit (%d sent) — cooling down %ss",
+                    self.max_per_window,
+                    self.cooldown_seconds,
+                )
+                await asyncio.sleep(self.cooldown_seconds)
+                self._count = 0
+            elif self._count > 0:
+                await asyncio.sleep(self.per_send_delay)
+            self._count += 1
+
+
+MINT_FEED_LIMITER = MintFeedLimiter(
+    MINT_FEED_MAX_PER_WINDOW, MINT_FEED_PER_SEND_DELAY, MINT_FEED_COOLDOWN_SECONDS
+)
+
 _PRICE_CACHE: dict = {"checked_at": 0.0, "usd": None}
 
 
@@ -776,7 +828,7 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
 
     text = "\n".join(lines)
 
-    await RATE_LIMITER.wait_turn()
+    await MINT_FEED_LIMITER.wait_turn()
     for chat_id in subs:
         try:
             await app.bot.send_message(
@@ -992,9 +1044,9 @@ HELP_TEXT = (
     "/watch <address> [label] — (admin) track a specific collection\n"
     "/unwatch <address> — (admin) stop tracking a collection\n\n"
     "*New-contract feed*\n"
-    "/subscribe_new — get alerted the moment a new NFT contract is deployed "
-    "(plus a follow-up when it mints for the first time)\n"
-    "/unsubscribe_new — stop new-contract alerts here\n"
+    "/subscribe_new (or /subscribenew) — get alerted the moment a new NFT "
+    "contract is deployed (plus a follow-up when it mints for the first time)\n"
+    "/unsubscribe_new (or /unsubscribenew) — stop new-contract alerts here\n"
     "/pending — list deployed contracts that haven't minted yet\n\n"
     "*Trending*\n"
     "/trending — top 10 collections by mint activity in the last 24h\n\n"
@@ -1117,7 +1169,9 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-async def cmd_trending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def build_trending_text() -> str | None:
+    """Shared by /trending and the live-refresh loop so both always render
+    identically. Returns None when there's no data yet."""
     data = load_trending()
     now = time.time()
     cutoff = now - TRENDING_WINDOW_SECONDS
@@ -1130,11 +1184,7 @@ async def cmd_trending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ranked.append((addr, entry.get("label", addr), len(recent_mints), len(entry.get("holders", []))))
 
     if not ranked:
-        await update.message.reply_text(
-            "No mint activity tracked in the trending window yet — check "
-            "back once collections start minting."
-        )
-        return
+        return None
 
     ranked.sort(key=lambda r: r[2], reverse=True)
     top = ranked[:10]
@@ -1153,9 +1203,72 @@ async def cmd_trending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     lines.append("")
     lines.append(
         f"_Ranked by mints in the last {window_hours}h, tracked since the bot "
-        f"started. Holder counts are a running lower bound._"
+        f"started. Holder counts are a running lower bound. Updates live — "
+        f"no need to re-run /trending._"
     )
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    return "\n".join(lines)
+
+
+async def cmd_trending(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = await build_trending_text()
+    if text is None:
+        await update.message.reply_text(
+            "No mint activity tracked in the trending window yet — check "
+            "back once collections start minting."
+        )
+        return
+
+    sent = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # Register this message to keep refreshing in place. Only one live
+    # table per chat — re-running /trending here just retargets it to the
+    # newest message.
+    live = load_live_trending()
+    live[str(update.effective_chat.id)] = {
+        "chat_id": update.effective_chat.id,
+        "message_id": sent.message_id,
+    }
+    save_live_trending(live)
+
+
+async def live_trending_loop(app: Application) -> None:
+    """Periodically edits every registered /trending message in place.
+    A "message is not modified" edit error means the ranking hasn't
+    changed — that's expected and ignored. Any other failure (message
+    deleted, bot blocked, chat gone) drops that target so we're not
+    retrying it forever."""
+    while True:
+        await asyncio.sleep(LIVE_TRENDING_REFRESH_SECONDS)
+        try:
+            live = load_live_trending()
+            if not live:
+                continue
+            text = await build_trending_text()
+            if text is None:
+                continue
+
+            stale_keys = []
+            for key, target in live.items():
+                try:
+                    await app.bot.edit_message_text(
+                        chat_id=target["chat_id"],
+                        message_id=target["message_id"],
+                        text=text,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except Exception as exc:
+                    if "message is not modified" in str(exc).lower():
+                        continue
+                    log.info("Dropping live /trending target %s: %s", key, exc)
+                    stale_keys.append(key)
+
+            if stale_keys:
+                live = load_live_trending()
+                for key in stale_keys:
+                    live.pop(key, None)
+                save_live_trending(live)
+        except Exception:
+            log.exception("Live trending refresh loop error, will retry")
 
 
 # --------------------------------------------------------------------------
@@ -1226,6 +1339,7 @@ async def post_init(app: Application) -> None:
     asyncio.create_task(poll_loop(app))
     asyncio.create_task(new_contract_loop(app))
     asyncio.create_task(heartbeat_loop())
+    asyncio.create_task(live_trending_loop(app))
     await send_status_message(
         app, "🟢 Bot is online and tracking Robinhood Chain NFT activity."
     )
@@ -1268,7 +1382,9 @@ def main() -> None:
     app.add_handler(CommandHandler("unwatch", cmd_unwatch))
     app.add_handler(CommandHandler("watching", cmd_watching))
     app.add_handler(CommandHandler("subscribe_new", cmd_subscribe_new))
+    app.add_handler(CommandHandler("subscribenew", cmd_subscribe_new))  # alias, no underscore
     app.add_handler(CommandHandler("unsubscribe_new", cmd_unsubscribe_new))
+    app.add_handler(CommandHandler("unsubscribenew", cmd_unsubscribe_new))  # alias, no underscore
     app.add_handler(CommandHandler("pending", cmd_pending))
     app.add_handler(CommandHandler("trending", cmd_trending))
     # Catch-all for unmatched commands — must be added last. filters.COMMAND
