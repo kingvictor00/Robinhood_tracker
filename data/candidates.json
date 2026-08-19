@@ -14,7 +14,7 @@
     "deployer": "0xC6A053D16FEAad387b7441f84522fD0b79a85eD8",
     "tx_hash": "0x13a3e28370e51a9429a607e051a649cbdf28bcc7f9c2f3856593f03f296840f5",
     "block": 36765368,
-    "minted": false,
+    "minted": true,
     "socials": {}
   },
   "0x0d6be648c9f6fb25456928976b0ccef008de1106": {
@@ -25,5 +25,50 @@
     "block": 36765963,
     "minted": true,
     "socials": {}
+  },
+  "0x0aa795bb975fa9e31e05fcfb77cf9e5bc0ebc07b": {
+    "standard": "ERC-721",
+    "label": "Custom Test (CTST)",
+    "deployer": "0x1241d5AE9beF8a0B3FB3fb785A8287688f28500B",
+    "tx_hash": "0xe68d721059d6df9328d8144055be65d7a4c7bbf21af742d1cbc756dc88d3d227",
+    "block": 38032311,
+    "minted": true,
+    "socials": {},
+    "socials_notes": [
+      "contractURI: set, but metadata couldn't be fetched",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ]
+  },
+  "0x916b2564ade0d1ed5755d4e0f9f5b462cb4ce8f5": {
+    "standard": "ERC-721",
+    "label": "The Ninefivers (959)",
+    "deployer": "0x1aC38267caA4711eD2f9fA883BC566eDBa61306c",
+    "tx_hash": "0x4a1bb538c3a092c148e2a296ed2b2bef283ba6a7c86b1826b6d432c2e9c41090",
+    "block": 38032760,
+    "minted": true,
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ]
+  },
+  "0xf67f14daf5d14765b36b1d8024e05fb45d5db7e5": {
+    "standard": "ERC-1155",
+    "label": "0xF67F\u2026b7E5",
+    "deployer": "0x04ba68Ca9001ad1449C2D324eFF73a87bB789d31",
+    "tx_hash": "0xb48fb7492a9365595766c7c6353258046552f284372c144a17ae893682add52b",
+    "block": 38035806,
+    "minted": false,
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ]
   }
 }

@@ -1,0 +1,801 @@
+{
+  "0x0aa795bb975fa9e31e05fcfb77cf9e5bc0ebc07b": {
+    "checked_at": 1786889171.7171593,
+    "slug": "custom-test-317000399",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: set, but metadata couldn't be fetched",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x0ca1d8ed3741fcc3d6db3a715338c73439f56008": {
+    "checked_at": 1786889181.739625,
+    "slug": "cursed-calves",
+    "socials": {
+      "twitter": "https://x.com/CURSED_CAlVES"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.00013
+  },
+  "0x020f1bed27cce7643e6517396100749ee6af4ad9": {
+    "checked_at": 1786913834.5361812,
+    "slug": "the-americans-rh",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0212
+  },
+  "0x6d9905cfbc6ff15784ab6dcf113f62b18252ee1a": {
+    "checked_at": 1786913835.6765437,
+    "slug": "h00d--r00st",
+    "socials": {
+      "twitter": "https://x.com/H00dR00st"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0003996
+  },
+  "0xe0f92b3b0e6ded3654177fe3809cd300e5ffadf6": {
+    "checked_at": 1786913655.9374397,
+    "slug": "gogh-punks-255843210",
+    "socials": {
+      "twitter": "https://x.com/goghpunks"
+    },
+    "socials_notes": [
+      "contractURI: set, but metadata couldn't be fetched",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000199
+  },
+  "0x0656652d889342f1a2b179f48ea4ab26e0e80e40": {
+    "checked_at": 1786913812.934221,
+    "slug": "0x0656652d889342f1a2b179f48ea4ab26e0e80e40",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.05
+  },
+  "0x128a887e58bd3998a0bfb9d5d79aa907498dd2ed": {
+    "checked_at": 1786913847.5402758,
+    "slug": "daks-on-hood-544193218",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.03
+  },
+  "0x312d3db793c2e8fb2903012b376ee794abf0793c": {
+    "checked_at": 1786913455.6574218,
+    "slug": "funkycatslabs",
+    "socials": {
+      "twitter": "https://x.com/FunkyCatsLabs"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 2e-05
+  },
+  "0x3360556af8e5255ab0fa7d3bc28c6ba54ca31320": {
+    "checked_at": 1786913685.267354,
+    "slug": "hmm-cat-39998770",
+    "socials": {
+      "twitter": "https://x.com/hmmcatrbh"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000419999998
+  },
+  "0x13f73888d1c2ecf8795ba90371863b4b90b52800": {
+    "checked_at": 1786913818.7534375,
+    "slug": "workerss",
+    "socials": {
+      "twitter": "https://x.com/Workersssss"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 5.9
+  },
+  "0xb9687072aec316c4a8394df4597857b44a1c5057": {
+    "checked_at": 1786913676.3032715,
+    "slug": "genesis-bug---------",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0xbfbcd6cf81485d6d3aa91f0a98fb15e7e5cea2f3": {
+    "checked_at": 1786913754.2728698,
+    "slug": "therobinwall",
+    "socials": {
+      "twitter": "https://x.com/TheRobinWall"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0002
+  },
+  "0xe6fa5af170c9c23a6924146db04a5a64105d7003": {
+    "checked_at": 1786889221.0179622,
+    "slug": "mini-myths-873725501",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.1
+  },
+  "0xefa606860d42fdbb4e768506e38d63322c3f2fb6": {
+    "checked_at": 1786889222.6932275,
+    "slug": "pepihood",
+    "socials": {
+      "twitter": "https://x.com/Pepihood"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000483
+  },
+  "0x58daec3116aae6d93017baaea7749052e8a04fa7": {
+    "checked_at": 1786913643.286052,
+    "slug": "0x58daec3116aae6d93017baaea7749052e8a04fa7",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.00013999999998
+  },
+  "0xdb7cf5bb66efbf995545e5335cb107ed32866d29": {
+    "checked_at": 1786913814.0428493,
+    "slug": "spawnhood",
+    "socials": {
+      "website": "https://build-63e0680f0f405dd3ab519785.emblem.build/pub/spawn/spawning-pool/",
+      "twitter": "https://x.com/Spawntoshi"
+    },
+    "socials_notes": [
+      "contractURI: found socials",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.002289999996
+  },
+  "0xb39c8fc111108cfd4d31ccd9f8683a15580a6d5a": {
+    "checked_at": 1786889234.8472269,
+    "slug": "robinhood-chimps",
+    "socials": {
+      "twitter": "https://x.com/RobinhoodChimps"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.003368498
+  },
+  "0x562d2e2758b1c342a8f305c379017cadd5bf5cdd": {
+    "checked_at": 1786889243.5103278,
+    "slug": "0x562d2e2758b1c342a8f305c379017cadd5bf5cdd",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 2.7e-05
+  },
+  "0x581e0aa6ac3ae9ef67170916e2a8dc09598f0a0d": {
+    "checked_at": 1786913608.696209,
+    "slug": "chinese-rh",
+    "socials": {
+      "twitter": "https://x.com/TheChineseRH"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.001519999999
+  },
+  "0x6e1fd0a74ccc9ab87eafb89c8ecc6bb2dceb95d7": {
+    "checked_at": 1786890103.7796776,
+    "slug": "orbital-598080878",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x4612e2a0c4a44311f9eb31ecf2e28bfd57fb8d2e": {
+    "checked_at": 1786889270.3990567,
+    "slug": "hood-hedgies",
+    "socials": {
+      "twitter": "https://x.com/HoodHedgies"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0002
+  },
+  "0xd2dd3452b835c9cf8bdef15b33abf4befc41de68": {
+    "checked_at": 1786913671.2761197,
+    "slug": "0xd2dd3452b835c9cf8bdef15b33abf4befc41de68",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.02
+  },
+  "0x51d0e5188afe12d502e29d982d20c190e7816107": {
+    "checked_at": 1786892028.1498077,
+    "slug": "sushiswap-v3-positions-nft-v1-264177757",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0xf918c4905229070b197589cf5e519329ee1ef302": {
+    "checked_at": 1786889283.6396039,
+    "slug": "robinmonkes",
+    "socials": {
+      "twitter": "https://x.com/Robinmonkess"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000158
+  },
+  "0x43d6bbdf37ef8b7cd0bda2d00e0b63111ec5e445": {
+    "checked_at": 1786913302.4342506,
+    "slug": "h0rizon",
+    "socials": {
+      "twitter": "https://x.com/h0rizon_LAB"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.00068999999999
+  },
+  "0x904a3f7e32d7259d9b520b5c0c158e5c3a60d860": {
+    "checked_at": 1786913677.7225196,
+    "slug": "cash-dogs-",
+    "socials": {
+      "twitter": "https://x.com/CashDogs_"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.004239999999
+  },
+  "0xb509e195bcb3e4461e235ff152c68d66915f67b5": {
+    "checked_at": 1786889294.7650182,
+    "slug": "rh-machines",
+    "socials": {
+      "twitter": "https://x.com/btcordinal"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.078
+  },
+  "0x22409af1d6b65497e3daa0327f9ebc329ed4cb94": {
+    "checked_at": 1786913753.304249,
+    "slug": "runebrokers",
+    "socials": {
+      "telegram": "https://t.me/+KGH6cv1C3PdjZTlh",
+      "twitter": "https://x.com/runebrokers"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.05
+  },
+  "0x07f44c47743a2f36414a82b9f558ecfcf0eedcef": {
+    "checked_at": 1786913621.397835,
+    "slug": "up-position-nft",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.078
+  },
+  "0x73991a25c818bf1f1128deaab1492d45638de0d3": {
+    "checked_at": 1786889306.687854,
+    "slug": "0x73991a25c818bf1f1128deaab1492d45638de0d3",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.00013999999999
+  },
+  "0x916b2564ade0d1ed5755d4e0f9f5b462cb4ce8f5": {
+    "checked_at": 1786889348.2680159,
+    "slug": "the-ninefivers",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x7e11f4c88337ed0878316e330a308a0e424c2b49": {
+    "checked_at": 1786913782.8782437,
+    "slug": "sad-cat-155481997",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x8251009100326333d9fe0dd65665019bcbe10623": {
+    "checked_at": 1786889936.9455853,
+    "slug": "stonkbrokersclock-547213216",
+    "socials": {
+      "twitter": "https://x.com/ClockInNFT"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 7.92e-05
+  },
+  "0x027aca2794e44f24950d81227dcd516ffbb49d6e": {
+    "checked_at": 1786892240.9526057,
+    "slug": "Quotrons404",
+    "socials": {
+      "twitter": "https://x.com/Quotrons404"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 346.0
+  },
+  "0xb518f70c78a8340b7df55b6ef001e8a846a495b4": {
+    "checked_at": 1786889952.6155534,
+    "slug": "dunamu-dunamu-two-sacred-trees",
+    "socials": {
+      "twitter": "https://x.com/DunamuNFT"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0004
+  },
+  "0xd19fe5b7f7cbabc7ea0a7213dfd306675d918672": {
+    "checked_at": 1786912900.8423922,
+    "slug": "ponsrig-machines-189588789",
+    "socials": {
+      "website": "https://ponsrig.xyz",
+      "twitter": "https://x.com/ponsdotRIG"
+    },
+    "socials_notes": [
+      "contractURI: found socials",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.004499999999
+  },
+  "0xbde7bec47cbfc689e5e952b6cdd113a500abcd83": {
+    "checked_at": 1786913534.701581,
+    "slug": "quotrons",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 3.0
+  },
+  "0x37489362fe802c7832d2de54ad872f39c06264b9": {
+    "checked_at": 1786891343.5546472,
+    "slug": "spawnhood-genesis-921976653",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x0d64c41311c2e1ecce2fc609205c514e2b8488de": {
+    "checked_at": 1786891345.0676055,
+    "slug": "human-hood-783661120",
+    "socials": {
+      "twitter": "https://x.com/HumannHood"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.65
+  },
+  "0x8b796811803b7362104337adb51197882853ba33": {
+    "checked_at": 1786891357.0930696,
+    "slug": "hoodmancers",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000449
+  },
+  "0x4a5f96657a97ec15c118a9cdcb9bc1855cdfd6d1": {
+    "checked_at": 1786891375.3921025,
+    "slug": "biwslxy",
+    "socials": {
+      "twitter": "https://x.com/aevumprotocolfi"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.33
+  },
+  "0x12a41ebe4849134527d69c9d4b69dbb7d7765a58": {
+    "checked_at": 1786891378.0404363,
+    "slug": "crocs-on-hoods",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x2995e8a833e320874bf5999750a9d9f26cc29cc4": {
+    "checked_at": 1786892261.263247,
+    "slug": "tickup-fun",
+    "socials": {
+      "twitter": "https://x.com/tickupfun"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.01
+  },
+  "0xb727b5bbd455736a543d6913409cbf5c32c68877": {
+    "checked_at": 1786891947.7133296,
+    "slug": "h00d-r00st-nft-916597053",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0x15dde06f2994c764dae0d9668e3de103078e3b81": {
+    "checked_at": 1786892273.6099243,
+    "slug": "test23999643",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 2.0
+  },
+  "0x2734ffab2173411bab5e3971737275026e73e461": {
+    "checked_at": 1786891966.1149418,
+    "slug": "gods-brokers",
+    "socials": {
+      "twitter": "https://x.com/GodsBrokers"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000149
+  },
+  "0x23c7b0e0e555df44245787507c64d5bedc65a8f5": {
+    "checked_at": 1786892210.4162304,
+    "slug": "lune-102944019",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.99
+  },
+  "0x6ba73d163611db39cccbc3cfab259ec8699e4be4": {
+    "checked_at": 1786892217.8942516,
+    "slug": "pump-424547784",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 1e-05
+  },
+  "0x53bedbfde2af2617ff89acc5bb80cdd3649aadd0": {
+    "checked_at": 1786892220.9062681,
+    "slug": "doodboys",
+    "socials": {
+      "twitter": "https://x.com/DoodBoysnft"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0004974999
+  },
+  "0x869dc759b1439aa31a16c154070d05c861f3324c": {
+    "checked_at": 1786892238.9825842,
+    "slug": "hoodvoralez",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.00012
+  },
+  "0xd81788c13b571c09fc0abd05f5da3a73d17865a7": {
+    "checked_at": 1786892242.3335273,
+    "slug": "brokecatss",
+    "socials": {
+      "twitter": "https://x.com/BrokeCatss"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000249
+  },
+  "0x0dc375268452770bc0438138edc2e1c380310029": {
+    "checked_at": 1786892260.3093576,
+    "slug": "skulls-hood-",
+    "socials": {
+      "twitter": "https://x.com/skullshood_"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.09
+  },
+  "0xfc956643fbe881c06d89e1b55355d7dcb42e79e6": {
+    "checked_at": 1786912890.4300458,
+    "slug": "cash-ape-s",
+    "socials": {
+      "twitter": "https://x.com/cash_ape"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0005879999
+  },
+  "0x6b5246c662f9ffc9d8da59d1c6bf409915c90ad4": {
+    "checked_at": 1786913609.283281,
+    "slug": "eternals-nft",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.07
+  },
+  "0x4d908ec6f8b6b63dcd57e68ede19e595c402d83b": {
+    "checked_at": 1786913414.9730988,
+    "slug": "bulls-runners-genesis",
+    "socials": {
+      "twitter": "https://x.com/BullsRunners"
+    },
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0658959
+  },
+  "0xf67f14daf5d14765b36b1d8024e05fb45d5db7e5": {
+    "checked_at": 1786913423.1400795,
+    "slug": "0xf67f14daf5d14765b36b1d8024e05fb45d5db7e5",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0
+  },
+  "0xa79f5775b0b49e51202c48ddf03f380faa96f641": {
+    "checked_at": 1786913536.89054,
+    "slug": "giga-positions",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0043
+  },
+  "0xae3bf191217d36485b0f22e28920070057f34662": {
+    "checked_at": 1786913564.4074914,
+    "slug": "kami-hood-184082878",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 9.999999e-05
+  },
+  "0xacd122829041c7138b17b0b48eb946882aef54e3": {
+    "checked_at": 1786913698.2916338,
+    "slug": "nothing-ipo",
+    "socials": {},
+    "socials_notes": [
+      "contractURI: not implemented by this contract",
+      "OpenSea: slug resolved",
+      "OpenSea: collection found, but no social links listed",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.97
+  },
+  "0xf29ac2816bc520cefc90cb6ebafeabbfbc74ff58": {
+    "checked_at": 1786913711.8655071,
+    "slug": "chain-traders-nft",
+    "socials": {
+      "twitter": "https://x.com/ChainTradersNFT"
+    },
+    "socials_notes": [
+      "contractURI: set, but metadata couldn't be fetched",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.0045
+  },
+  "0xc2e29ff7d4933d6ad609917236fd2a8278e87598": {
+    "checked_at": 1786913795.498272,
+    "slug": "outlandersonrh",
+    "socials": {
+      "twitter": "https://x.com/Outlandersonrh"
+    },
+    "socials_notes": [
+      "contractURI: empty",
+      "OpenSea: slug resolved",
+      "OpenSea: found socials",
+      "OpenSea: floor found"
+    ],
+    "floor_price": 0.000485
+  }
+}
