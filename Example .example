@@ -1,0 +1,76 @@
+# Get this from @BotFather on Telegram after creating your bot
+TELEGRAM_BOT_TOKEN=123456789:AAExampleTokenReplaceMe
+
+# Your personal Telegram numeric user ID (get it from @userinfobot).
+# Only this chat ID can use /watch and /unwatch. Leave blank to disable
+# collection management via chat (you can still hand-edit data/contracts.json).
+ADMIN_CHAT_ID=
+
+# Robinhood Chain mainnet public RPC (chain ID 4663). Rate limited — swap in
+# a paid provider (Alchemy/Quicknode/dRPC/Chainstack) for production use.
+RPC_URL=https://rpc.mainnet.chain.robinhood.com
+
+# Blockscout explorer used to build "view transaction" / "view contract" links
+EXPLORER_TX_URL=https://robinhoodchain.blockscout.com/tx/
+EXPLORER_ADDR_URL=https://robinhoodchain.blockscout.com/address/
+
+# How often to poll for new blocks, in seconds
+POLL_INTERVAL_SECONDS=8
+
+# Max number of blocks fetched per eth_getLogs call (keeps requests small
+# on rate-limited RPCs)
+MAX_BLOCK_SPAN=500
+
+# --- New-contract detection (/subscribe_new, /pending) ---
+# This feature reads every block in range (to find contract-creation txs),
+# which is heavier on the RPC than the log-based mint feed. Keep the span
+# small on the free public RPC; raise it if you're on a paid provider.
+NEW_CONTRACT_BLOCK_SPAN=50
+NEW_CONTRACT_POLL_INTERVAL_SECONDS=15
+
+# --- Socials + floor price lookup (optional) ---
+# Free instant key: curl -s -X POST https://api.opensea.io/api/v2/auth/keys
+# Leave blank to rely on-chain contractURI() metadata only (no floor price).
+OPENSEA_API_KEY=
+OPENSEA_CHAIN_SLUG=robinhood
+OPENSEA_CACHE_TTL_SECONDS=300
+SUPPLY_CACHE_TTL_SECONDS=30
+NATIVE_CURRENCY_SYMBOL=ETH
+
+# Used to convert floor price from the native token into USD.
+# COINGECKO_ID is the id CoinGecko uses for that token (no API key needed
+# for this basic price lookup).
+COINGECKO_ID=ethereum
+PRICE_CACHE_TTL_SECONDS=60
+
+# --- Outgoing message rate limit (prevents a busy mint from flooding a chat) ---
+# Send this many alerts, then pause this many seconds before sending more.
+RATE_LIMIT_MAX_MESSAGES=15
+RATE_LIMIT_COOLDOWN_SECONDS=10
+
+# --- /subscribe (mint/transfer/burn) feed throttle — separate from the
+# general limiter above, applies only to this one feed ---
+MINT_FEED_MAX_PER_WINDOW=10
+MINT_FEED_PER_SEND_DELAY_SECONDS=5
+MINT_FEED_COOLDOWN_SECONDS=60
+
+# --- Online/hibernating status notifications ---
+# Admin-only by default (avoids spamming everyone on routine restarts).
+# Set to "true" to notify every subscriber on both feeds instead.
+NOTIFY_ALL_SUBSCRIBERS_ON_STATUS=false
+# How often bot.py writes its heartbeat file (used by watchdog.py)
+HEARTBEAT_INTERVAL_SECONDS=30
+# How long the heartbeat can go stale before watchdog.py considers the bot
+# hibernating. Keep this comfortably above HEARTBEAT_INTERVAL_SECONDS.
+HEARTBEAT_STALE_SECONDS=120
+
+# --- /trending ---
+# Ranking window for "trending" — mints in the last N seconds (default 24h)
+TRENDING_WINDOW_SECONDS=86400
+# Safety cap on the holders list tracked per collection
+TRENDING_MAX_HOLDERS_TRACKED=5000
+# How often a /trending message refreshes itself in place, in seconds
+LIVE_TRENDING_REFRESH_SECONDS=60
+
+# Where state.json / subscribers.json / contracts.json / candidates.json are stored
+DATA_DIR=./data
