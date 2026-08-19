@@ -772,7 +772,7 @@ async def broadcast_event(app: Application, ev: dict, entry, contracts: dict) ->
     else:
         kind = "transfer"
 
-    label = get_collection_label(ev["contract"], contracts)
+    label = await asyncio.to_thread(get_collection_label, ev["contract"], contracts)
 
     if kind == "mint":
         # Feeds /trending regardless of whether anyone's subscribed to the
@@ -922,7 +922,7 @@ async def broadcast_new_contract(app: Application, address: str, info: dict) -> 
 async def handle_possible_new_contract(app: Application, tx) -> None:
     tx_hash = tx["hash"]
     try:
-        receipt = w3.eth.get_transaction_receipt(tx_hash)
+        receipt = await asyncio.to_thread(w3.eth.get_transaction_receipt, tx_hash)
     except Exception:
         return
     address = receipt.get("contractAddress")
@@ -962,7 +962,7 @@ async def new_contract_loop(app: Application) -> None:
     state = load_state()
     if state.get("last_block_new_contracts") is None:
         try:
-            state["last_block_new_contracts"] = w3.eth.block_number
+            state["last_block_new_contracts"] = await asyncio.to_thread(lambda: w3.eth.block_number)
             save_state(state)
         except Exception:
             log.exception("Could not reach RPC at startup, will retry")
@@ -970,13 +970,15 @@ async def new_contract_loop(app: Application) -> None:
 
     while True:
         try:
-            latest = w3.eth.block_number
+            latest = await asyncio.to_thread(lambda: w3.eth.block_number)
             from_block = state["last_block_new_contracts"] + 1
             to_block = min(from_block + NEW_CONTRACT_BLOCK_SPAN - 1, latest)
 
             if from_block <= to_block:
                 for block_num in range(from_block, to_block + 1):
-                    block = w3.eth.get_block(block_num, full_transactions=True)
+                    block = await asyncio.to_thread(
+                        w3.eth.get_block, block_num, full_transactions=True
+                    )
                     for tx in block["transactions"]:
                         if tx.get("to") is None:
                             await handle_possible_new_contract(app, tx)
@@ -997,7 +999,7 @@ async def poll_loop(app: Application) -> None:
     state = load_state()
     if state.get("last_block") is None:
         try:
-            state["last_block"] = w3.eth.block_number
+            state["last_block"] = await asyncio.to_thread(lambda: w3.eth.block_number)
             save_state(state)
             log.info("Starting from current block %s", state["last_block"])
         except Exception:
@@ -1006,7 +1008,7 @@ async def poll_loop(app: Application) -> None:
 
     while True:
         try:
-            latest = w3.eth.block_number
+            latest = await asyncio.to_thread(lambda: w3.eth.block_number)
             contracts = load_contracts()
             addr_filter = (
                 [Web3.to_checksum_address(a) for a in contracts.keys()]
@@ -1017,7 +1019,7 @@ async def poll_loop(app: Application) -> None:
             from_block = state["last_block"] + 1
             while from_block <= latest:
                 to_block = min(from_block + MAX_BLOCK_SPAN - 1, latest)
-                logs = fetch_logs(from_block, to_block, addr_filter)
+                logs = await asyncio.to_thread(fetch_logs, from_block, to_block, addr_filter)
                 for entry in logs:
                     for ev in classify_and_parse(entry):
                         await broadcast_event(app, ev, entry, contracts)
@@ -1097,7 +1099,8 @@ async def cmd_watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     label = " ".join(context.args[1:]) if len(context.args) > 1 else None
     contracts = load_contracts()
-    contracts[address.lower()] = label or get_collection_label(address, {})
+    resolved_label = label or await asyncio.to_thread(get_collection_label, address, {})
+    contracts[address.lower()] = resolved_label
     save_contracts(contracts)
     await update.message.reply_text(
         f"👀 Now watching {contracts[address.lower()]} ({short_addr(address)})"
