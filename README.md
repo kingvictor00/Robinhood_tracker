@@ -42,12 +42,18 @@ show `N/A` when unavailable rather than guessing:
 - **Mint count** is tracked by the bot itself, per buyer per contract,
   starting from whenever the bot began running (no historical backfill).
 
-To avoid flooding a chat during a busy mint, outgoing alerts are rate
-limited: after `RATE_LIMIT_MAX_MESSAGES` alerts (default 15), the bot
-pauses `RATE_LIMIT_COOLDOWN_SECONDS` (default 10s) before sending more.
-This applies across all feeds combined, not per-collection.
+**`/subscribe` has its own dedicated throttle**, separate from the general
+limiter used by the other feeds: up to `MINT_FEED_MAX_PER_WINDOW` alerts
+(default 10), with a `MINT_FEED_PER_SEND_DELAY_SECONDS` pause (default 5s)
+between each one — then once the window's limit is hit, a full
+`MINT_FEED_COOLDOWN_SECONDS` cooldown (default 60s) before it resumes.
+The new-contract feed and first-mint follow-ups use a separate, simpler
+limiter (`RATE_LIMIT_MAX_MESSAGES` / `RATE_LIMIT_COOLDOWN_SECONDS`,
+default 15 alerts then a 10s pause) — busy activity on one feed doesn't
+throttle the other.
 
-**New-contract feed** (`/subscribe_new`) — a separate scan reads every
+**New-contract feed** (`/subscribe_new`, or `/subscribenew` — both work)
+— a separate scan reads every
 block for contract-creation transactions, checks each new contract against
 ERC-165 (`supportsInterface`) for ERC-721/1155, and — if it matches —
 alerts immediately, before the contract has necessarily minted anything.
@@ -146,8 +152,8 @@ Add the bot to a group (or DM it directly), then:
 | `/watching` | anyone | list which collections the mint feed is tracking |
 | `/watch <address> [label]` | admin only | narrow the mint feed to a specific collection |
 | `/unwatch <address>` | admin only | remove a collection from the watch list |
-| `/subscribe_new` | anyone | get alerted the moment a new NFT contract is deployed, plus a follow-up on its first mint |
-| `/unsubscribe_new` | anyone | stop new-contract alerts in this chat |
+| `/subscribe_new` (or `/subscribenew`) | anyone | get alerted the moment a new NFT contract is deployed, plus a follow-up on its first mint |
+| `/unsubscribe_new` (or `/unsubscribenew`) | anyone | stop new-contract alerts in this chat |
 | `/pending` | anyone | list deployed contracts that haven't minted yet |
 | `/trending` | anyone | top 10 collections by mint activity in the last 24h |
 | `/help` | anyone | show command list |
@@ -176,6 +182,7 @@ rh-nft-bot/
     ├── opensea_cache.json    # cached socials/floor-price lookups (TTL'd)
     ├── mint_counts.json      # per-buyer, per-contract mint counts
     ├── trending.json         # per-contract mint timestamps + seen holders (feeds /trending)
+    ├── live_trending.json    # which /trending messages are being kept live-updated
     ├── heartbeat.txt         # timestamp bot.py updates while alive
     └── watchdog_state.json   # whether watchdog.py has already alerted
 ```
@@ -195,6 +202,14 @@ the top 10 by mint count within `TRENDING_WINDOW_SECONDS` (default 24h):
 2: TOADLAYER | floor: $84.10 | supply: 766,857 | holders: 340+
 ...
 ```
+
+**It's a live table, not a one-shot reply.** Once sent, that message keeps
+editing itself in place every `LIVE_TRENDING_REFRESH_SECONDS` (default
+60s) — no need to re-run `/trending` to see updated numbers. Running
+`/trending` again in the same chat just retargets the live updates to the
+newest message. If a message stops being editable (deleted, or the bot's
+been removed from the chat), the bot notices on the next refresh attempt
+and stops trying — it doesn't retry forever.
 
 Two honest caveats baked into the design:
 - **This is "trending since the bot started," not all-time.** There's no
