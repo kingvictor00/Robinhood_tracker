@@ -960,13 +960,13 @@ async def handle_possible_new_contract(app: Application, tx) -> None:
 
 async def new_contract_loop(app: Application) -> None:
     state = load_state()
-    if state.get("last_block_new_contracts") is None:
+    while state.get("last_block_new_contracts") is None:
         try:
             state["last_block_new_contracts"] = await asyncio.to_thread(lambda: w3.eth.block_number)
             save_state(state)
         except Exception:
             log.exception("Could not reach RPC at startup, will retry")
-            state["last_block_new_contracts"] = 0
+            await asyncio.sleep(NEW_CONTRACT_POLL_INTERVAL)
 
     while True:
         try:
@@ -997,14 +997,14 @@ async def new_contract_loop(app: Application) -> None:
 # --------------------------------------------------------------------------
 async def poll_loop(app: Application) -> None:
     state = load_state()
-    if state.get("last_block") is None:
+    while state.get("last_block") is None:
         try:
             state["last_block"] = await asyncio.to_thread(lambda: w3.eth.block_number)
             save_state(state)
             log.info("Starting from current block %s", state["last_block"])
         except Exception:
             log.exception("Could not reach RPC at startup, will retry")
-            state["last_block"] = 0
+            await asyncio.sleep(POLL_INTERVAL)
 
     while True:
         try:
